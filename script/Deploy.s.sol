@@ -4,6 +4,7 @@ pragma solidity >=0.8.28 <0.9.0;
 import { Pareto } from "../src/Pareto.sol";
 import { ParetoGovernor } from "../src/ParetoGovernor.sol";
 import { ParetoTimelock } from "../src/ParetoTimelock.sol";
+import { MerkleClaim } from "../src/MerkleClaim.sol";
 
 import { BaseScript } from "./Base.s.sol";
 import "forge-std/src/console.sol";
@@ -41,5 +42,11 @@ contract Deploy is BaseScript {
     console.log('ParetoGovernor deployed at:', address(governor));
 
     require(governorAddr == address(governor), 'Governor address mismatch');
+
+    // deploy MerkleClaim
+    bytes32 merkleRoot = 0x0;
+    require(merkleRoot != 0x0, 'Merkle root is not set');
+    MerkleClaim merkle = new MerkleClaim(merkleRoot, address(par));
+    console.log('MerkleClaim deployed at:', address(merkle));
   }
 }
