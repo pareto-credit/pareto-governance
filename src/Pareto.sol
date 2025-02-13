@@ -8,7 +8,7 @@ import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 
 contract Pareto is ERC20, ERC20Permit, ERC20Votes {
   constructor() ERC20("Pareto", "PAR") ERC20Permit("Pareto") {
-    _mint(msg.sender, 18_200_000 * 1e18);
+    _mint(msg.sender, 18_200_000 * 10**18);
   }
 
   // Overrides IERC6372 functions to make the token & governor timestamp-based

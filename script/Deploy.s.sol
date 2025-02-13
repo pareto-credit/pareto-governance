@@ -9,7 +9,7 @@ import { MerkleClaim } from "../src/MerkleClaim.sol";
 import { BaseScript } from "./Base.s.sol";
 import "forge-std/src/console.sol";
 
-contract Deploy is BaseScript {
+contract DeployScript is BaseScript {
   function run() public broadcast {
     // forge script ./script/Deploy.s.sol \
     // --fork-url $ETH_RPC_URL \
@@ -23,7 +23,16 @@ contract Deploy is BaseScript {
     // --slow \
     // -vvv
 
-    Pareto par = new Pareto();
+    _deploy();
+  }
+
+  function _deploy() public returns (
+    Pareto par,
+    ParetoTimelock timelock,
+    ParetoGovernor governor,
+    MerkleClaim merkle
+  ) {
+    par = new Pareto();
     console.log('Pareto deployed at:', address(par));
 
     address deployer = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
@@ -36,9 +45,9 @@ contract Deploy is BaseScript {
     address[] memory executors = new address[](1);
     executors[0] = address(0); // anyone can execute
 
-    ParetoTimelock timelock = new ParetoTimelock(minDelay, proposers, executors);
+    timelock = new ParetoTimelock(minDelay, proposers, executors);
     console.log('ParetoTimelock deployed at:', address(timelock));
-    ParetoGovernor governor = new ParetoGovernor(par, timelock);
+    governor = new ParetoGovernor(par, timelock);
     console.log('ParetoGovernor deployed at:', address(governor));
 
     require(governorAddr == address(governor), 'Governor address mismatch');
@@ -46,7 +55,7 @@ contract Deploy is BaseScript {
     // deploy MerkleClaim
     bytes32 merkleRoot = 0x0;
     require(merkleRoot != 0x0, 'Merkle root is not set');
-    MerkleClaim merkle = new MerkleClaim(merkleRoot, address(par));
+    merkle = new MerkleClaim(merkleRoot, address(par));
     console.log('MerkleClaim deployed at:', address(merkle));
   }
 }

@@ -9,6 +9,7 @@ import {GovernorTimelockControl} from "@openzeppelin/contracts/governance/extens
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract ParetoGovernor is
   Governor,
@@ -30,8 +31,8 @@ contract ParetoGovernor is
     return 3 days;
   }
 
-  function proposalThreshold() public pure override returns (uint256) {
-    return 182_000; // 1% of token supply
+  function proposalThreshold() public view override returns (uint256) {
+    return IERC20(address(token())).totalSupply() * 1 / 100; // 1% of token supply
   }
 
   // The functions below are overrides required by Solidity.
