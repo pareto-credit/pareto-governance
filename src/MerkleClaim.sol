@@ -68,9 +68,9 @@ contract MerkleClaim {
   }
 
   function sweep() public {
-    require(msg.sender == TL_MULTISIG);
+    require(msg.sender == TL_MULTISIG, '!AUTH');
     // allow sweep after 60 days
-    require(block.timestamp > deployTime + 60 days);
+    require(block.timestamp > deployTime + 60 days, 'TOO_EARLY');
     address _token = token;
     IERC20(_token).transfer(msg.sender, IERC20(_token).balanceOf(address(this)));
   }
