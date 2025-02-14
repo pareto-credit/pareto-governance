@@ -7,7 +7,9 @@ import { console2 } from "forge-std/src/console2.sol";
 import { Pareto } from "../src/Pareto.sol";
 import { ParetoGovernor } from "../src/ParetoGovernor.sol";
 import { ParetoTimelock } from "../src/ParetoTimelock.sol";
-import { MerkleClaim } from "../src/MerkleClaim.sol";
+import { MerkleClaim } from "../src/MerkleClaim.sol";  
+import { GovernableFund } from "../src/GovernableFund.sol";
+
 import { DeployScript } from "../script/Deploy.s.sol";
 import { IGovernor } from "@openzeppelin/contracts/governance/IGovernor.sol";
 
@@ -16,15 +18,15 @@ contract TestDeployment is Test, DeployScript {
   ParetoTimelock timelock;
   ParetoGovernor governor;
   MerkleClaim merkle;
+  GovernableFund longTermFund;
   address public DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
   address public TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
-  uint256 public TOT_SUPPLY = 18_200_000 * 1e18;
 
   function setUp() public virtual {
     vm.createSelectFork("mainnet", 21836743);
 
     vm.startPrank(DEPLOYER);
-    (par, timelock, governor, merkle) = _deploy();
+    (par, timelock, governor, merkle, longTermFund) = _deploy();
     vm.stopPrank();
 
     skip(100);
@@ -32,7 +34,7 @@ contract TestDeployment is Test, DeployScript {
 
   function testDeploy() external view {
     assertEq(par.totalSupply(), TOT_SUPPLY, 'totalSupply is wrong');
-    assertEq(par.balanceOf(DEPLOYER), TOT_SUPPLY, 'DEPLOYER balance is wrong');
+    assertEq(par.balanceOf(DEPLOYER), TOT_SUPPLY - TOT_SUPPLY / 5, 'DEPLOYER balance is wrong');
     assertEq(par.clock(), uint48(block.timestamp), 'clock is wrong');
     assertEq(par.CLOCK_MODE(), "mode=timestamp", 'CLOCK_MODE is wrong');
 
@@ -47,26 +49,34 @@ contract TestDeployment is Test, DeployScript {
     assertEq(governor.votingPeriod(), 3 days, 'votingPeriod is wrong');
     assertEq(governor.proposalThreshold(), TOT_SUPPLY / 100, 'proposalThreshold is wrong');
     assertEq(uint256(governor.quorum(block.timestamp - 1)), TOT_SUPPLY * 4 / 100, 'quorum is wrong');
+
+    assertEq(longTermFund.owner(), address(timelock), 'owner is wrong');
+    assertEq(par.balanceOf(address(longTermFund)), TOT_SUPPLY / 5, 'initial balance is wrong');
+
+    assertEq(merkle.token(), address(par), 'merkle token is wrong');
+    assertEq(merkle.merkleRoot(), MERKLE_ROOT, 'merkleRoot is wrong');
+    assertEq(merkle.deployTime(), block.timestamp - 100, 'deployTime is wrong');
   }
 
   function testProposal() external {
+    uint256 amountToSend = 1000 * 1e18;
+
     // Test a proposal with governor
     vm.startPrank(DEPLOYER);
-    par.transfer(address(timelock), 1000 * 1e18);
     par.delegate(DEPLOYER);
     vm.stopPrank();
 
     skip(1);
-    assertEq(par.getPastVotes(DEPLOYER, block.timestamp - 1), TOT_SUPPLY - 1000 * 1e18, 'DEPLOYER votes are wrong');
+    assertEq(par.getPastVotes(DEPLOYER, block.timestamp - 1), TOT_SUPPLY -  TOT_SUPPLY / 5, 'DEPLOYER votes are wrong');
 
     // build proposal
-    string memory proposalDescription = "Proposal to send 1000 PAR from timelock to TL_MULTISIG";
+    string memory proposalDescription = "Proposal to send 1000 PAR from longTermFund to TL_MULTISIG";
     address[] memory targets = new address[](1);
-    targets[0] = address(par);
+    targets[0] = address(longTermFund);
     uint256[] memory values = new uint256[](1);
     values[0] = 0;
     bytes[] memory calldatas = new bytes[](1);
-    calldatas[0] = abi.encodeWithSelector(par.transfer.selector, TL_MULTISIG, 1000 * 1e18);
+    calldatas[0] = abi.encodeWithSelector(longTermFund.transfer.selector, address(par), TL_MULTISIG, amountToSend);
 
     vm.startPrank(TL_MULTISIG);
     vm.expectRevert(); // not enough votes
@@ -95,8 +105,8 @@ contract TestDeployment is Test, DeployScript {
     governor.execute(targets, values, calldatas, keccak256(bytes(proposalDescription)));
     assertEq(uint256(governor.state(proposalId)), uint256(IGovernor.ProposalState.Executed), "Proposal should be executed");
 
-    assertEq(par.balanceOf(TL_MULTISIG), 1000 * 1e18, 'TL_MULTISIG balance is wrong after execution');
-    assertEq(par.balanceOf(address(governor)), 0, 'Governor balance is wrong after execution');
+    assertEq(par.balanceOf(TL_MULTISIG), amountToSend, 'TL_MULTISIG balance is wrong after execution');
+    assertEq(par.balanceOf(address(longTermFund)), TOT_SUPPLY / 5 - amountToSend, 'longTermFund balance is wrong after execution');
   }
 
   function testMerkleDistribution() external {

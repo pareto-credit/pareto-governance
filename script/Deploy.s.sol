@@ -5,11 +5,15 @@ import { Pareto } from "../src/Pareto.sol";
 import { ParetoGovernor } from "../src/ParetoGovernor.sol";
 import { ParetoTimelock } from "../src/ParetoTimelock.sol";
 import { MerkleClaim } from "../src/MerkleClaim.sol";
+import { GovernableFund } from "../src/GovernableFund.sol";
 
 import { BaseScript } from "./Base.s.sol";
 import "forge-std/src/console.sol";
 
 contract DeployScript is BaseScript {
+  uint256 public TOT_SUPPLY = 18_200_000 * 1e18;
+  bytes32 public MERKLE_ROOT = 0x0;
+
   function run() public broadcast {
     // forge script ./script/Deploy.s.sol \
     // --fork-url $ETH_RPC_URL \
@@ -30,7 +34,8 @@ contract DeployScript is BaseScript {
     Pareto par,
     ParetoTimelock timelock,
     ParetoGovernor governor,
-    MerkleClaim merkle
+    MerkleClaim merkle,
+    GovernableFund longTermFund
   ) {
     par = new Pareto();
     console.log('Pareto deployed at:', address(par));
@@ -52,10 +57,15 @@ contract DeployScript is BaseScript {
 
     require(governorAddr == address(governor), 'Governor address mismatch');
 
+    longTermFund = new GovernableFund(address(timelock));
+    console.log('GovernableFund deployed at:', address(longTermFund));
+
+    par.transfer(address(longTermFund), TOT_SUPPLY / 5);
+    console.log('Transfered', TOT_SUPPLY / 5 / 1e18, 'Pareto to GovernableFund');
+
     // deploy MerkleClaim
-    bytes32 merkleRoot = 0x0;
-    require(merkleRoot != 0x0, 'Merkle root is not set');
-    merkle = new MerkleClaim(merkleRoot, address(par));
+    require(MERKLE_ROOT != 0x0, 'Merkle root is not set');
+    merkle = new MerkleClaim(MERKLE_ROOT, address(par));
     console.log('MerkleClaim deployed at:', address(merkle));
   }
 }
