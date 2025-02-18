@@ -1,13 +1,12 @@
-============================================================
 Pareto Governance – Combined License File
-============================================================
+------------------------------------------------------------
 
 This project is licensed under the MIT License. It also incorporates portions
 of software originally created by Paul Razvan Berg (foundry-template), which is also distributed
 under the MIT License. The full license texts for both are provided below.
 
 ------------------------------------------------------------
-My Project License (MIT License)
+Pareto Governance License (MIT License)
 ------------------------------------------------------------
 Copyright (c) 2025 Idle DAO LLC
 
