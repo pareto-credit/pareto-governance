@@ -7,7 +7,7 @@ import { MerkleProof } from "@openzeppelin/contracts/utils/cryptography/MerklePr
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @title MerkleClaim
-/// @notice Modified from https://github.com/Anish-Agnihotri/merkle-airdrop-starter/blob/master/contracts/src/MerkleClaimERC20.sol (no ERC20, cloneable)
+/// @notice Modified from https://github.com/Anish-Agnihotri/merkle-airdrop-starter/blob/master/contracts/src/MerkleClaimERC20.sol (no ERC20, no cloneable)
 /// @dev use https://github.com/OpenZeppelin/merkle-tree to generate root and proofs
 /// @author This version @bugduino . Original: Anish Agnihotri <contact@anishagnihotri.com>
 contract MerkleClaim {
@@ -20,6 +20,8 @@ contract MerkleClaim {
   address public token;
   /// @notice Time of deployment
   uint256 public deployTime;
+  /// @notice Claim is active
+  bool public isClaimActive;
   /// @notice Mapping of addresses who have claimed tokens
   mapping(address => bool) public hasClaimed;
 
@@ -29,6 +31,8 @@ contract MerkleClaim {
   error AlreadyClaimed();
   /// @notice Thrown if address/amount are not part of Merkle tree
   error InvalidProof();
+  /// @notice Thrown if claim is not active
+  error ClaimNotActive();
 
   /// ============ Initializer ========
 
@@ -51,6 +55,7 @@ contract MerkleClaim {
   /// @param amount of tokens owed to claimee
   /// @param proof merkle proof to prove address and amount are in tree
   function claim(address to, uint256 amount, bytes32[] calldata proof) external {
+    if (!isClaimActive) revert ClaimNotActive();
     // Throw if address has already claimed tokens
     if (hasClaimed[to]) revert AlreadyClaimed();
 
@@ -67,11 +72,18 @@ contract MerkleClaim {
     IERC20(token).transfer(to, amount);
   }
 
+  /// @notice Allows the multisig to sweep tokens after 60 days
   function sweep() public {
     require(msg.sender == TL_MULTISIG, '!AUTH');
     // allow sweep after 60 days
     require(block.timestamp > deployTime + 60 days, 'TOO_EARLY');
     address _token = token;
     IERC20(_token).transfer(msg.sender, IERC20(_token).balanceOf(address(this)));
+  }
+
+  /// @notice Allows the multisig to toggle claim active state
+  function toggleClaimActive() public {
+    require(msg.sender == TL_MULTISIG, '!AUTH');
+    isClaimActive = true;
   }
 }

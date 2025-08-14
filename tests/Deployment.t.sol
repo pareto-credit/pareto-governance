@@ -129,6 +129,18 @@ contract TestDeployment is Test, DeployScript {
     proof[9] = 0xb93939c9c9b3b35f55442b400b068aa60b723defd67ec11e47adbd8a6a2502a3;
     proof[10] = 0xda47cfc3f09fbbe0be6d0b9bac4bfd04015e3579ca7a028a98bf8144384de4bd;
     proof[11] = 0x1c02f46c754c2a851eb33fcb4be3739cc2b8af15c1059d135244abc87f935d03;
+    
+    // claim is not activated by default
+    vm.expectRevert(bytes("ClaimNotActive()"));
+    merkle.claim(toTest, amountExpected, proof);
+
+    // try to activate claim with wrong wallet
+    vm.expectRevert(bytes("!AUTH"));
+    merkle.toggleClaimActive();
+
+    // activate claims
+    vm.prank(TL_MULTISIG);
+    merkle.toggleClaimActive();
 
     uint256 balPre = par.balanceOf(toTest);
     merkle.claim(toTest, amountExpected, proof);
