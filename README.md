@@ -13,6 +13,28 @@ This repository contains the Pareto contracts:
 - MerkleClaim.sol: Merkle claim contract for TGE
 - GovernableFund.sol: Treasury contract for Pareto DAO
 
+## Functional Requirements
+- Mint a fixed supply of PAR tokens (18.2M) to the deployer and then send those funds to the MerkleClaim contract for distribution. Remaining supply is sent to a governance treasury contract.
+
+- Enable PAR holders to propose and vote via a Governor contract with a 10‑minute voting delay, 3‑day voting period, 4% quorum, and 1% proposal threshold.
+
+- Queue and execute approved proposals through a Timelock controller.
+
+- Allow whitelisted addresses to claim token allocations using Merkle proofs when claims are enabled, with an optional sweep of unclaimed tokens after 60 days.
+
+- Provide a treasury contract that lets the owner (ie the Timelock via a Governance proposal) transfer ERC‑20 tokens or ETH.
+
+## Technical Description
+- Contracts are written in Solidity 0.8.28 and rely heavily on OpenZeppelin libraries (ERC20Permit, ERC20Votes, Governor, TimelockController, SafeERC20, etc.).
+
+- The token contract overrides IERC6372 to use timestamps for governance voting.
+
+- Governance combines vote-counting, quorum fraction, and timelock modules from OpenZeppelin.
+
+- Merkle-based claiming uses MerkleProof to validate entitlements and is gated by a multisig address.
+
+- Foundry is used for building, testing, formatting, and deployment scripts.
+
 ## Installing Dependencies
 
 This is how to install dependencies:
