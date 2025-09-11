@@ -71,7 +71,7 @@ contract MerkleClaim {
   }
 
   /// @notice Allows the multisig to sweep tokens after 60 days
-  function sweep() public {
+  function sweep() external {
     require(msg.sender == TL_MULTISIG, '!AUTH');
     // allow sweep after 60 days
     require(block.timestamp > deployTime + 60 days, 'TOO_EARLY');
@@ -80,7 +80,7 @@ contract MerkleClaim {
   }
 
   /// @notice Allows the multisig to toggle claim active state
-  function enableClaims() public {
+  function enableClaims() external {
     require(msg.sender == TL_MULTISIG, '!AUTH');
     isClaimActive = true;
   }
