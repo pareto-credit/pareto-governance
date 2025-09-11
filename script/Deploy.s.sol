@@ -77,7 +77,7 @@ contract DeployScript is BaseScript {
     console.log('Transfered', TOT_SUPPLY - TOT_DISTRIBUTION, 'Pareto to GovernableFund');
 
     // activate claims with TL_MULTISIG if needed
-    // merkle.toggleClaimActive(); // activate claim
+    // merkle.enableClaims(); // activate claim
     console.log('NOTE: activate claims with TL_MULTISIG if needed');
   }
 }

@@ -82,7 +82,7 @@ contract MerkleClaim {
   }
 
   /// @notice Allows the multisig to toggle claim active state
-  function toggleClaimActive() public {
+  function enableClaims() public {
     require(msg.sender == TL_MULTISIG, '!AUTH');
     isClaimActive = true;
   }
