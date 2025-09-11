@@ -15,11 +15,11 @@ contract MerkleClaim {
   /// ============ Mutable storage ============
 
   /// @notice claimee inclusion root
-  bytes32 public merkleRoot;
+  bytes32 public immutable merkleRoot;
   /// @notice ERC20 to distribute which must be sent to this contract
-  address public token;
+  address public immutable token;
   /// @notice Time of deployment
-  uint256 public deployTime;
+  uint256 public immutable deployTime;
   /// @notice Claim is active
   bool public isClaimActive;
   /// @notice Mapping of addresses who have claimed tokens
