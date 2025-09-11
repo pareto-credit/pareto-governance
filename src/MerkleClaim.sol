@@ -40,8 +40,6 @@ contract MerkleClaim {
   /// @param _merkleRoot of claimees
   /// @param _token address of ERC20 to distribute
   constructor(bytes32 _merkleRoot, address _token) {
-    require(token == address(0), "Token is already set"); // Ensure token is not set
-
     merkleRoot = _merkleRoot; // Update root
     token = _token;
 
