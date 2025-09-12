@@ -6,15 +6,21 @@ import { ParetoGovernor } from "../src/ParetoGovernor.sol";
 import { ParetoTimelock } from "../src/ParetoTimelock.sol";
 import { MerkleClaim } from "../src/MerkleClaim.sol";
 import { GovernableFund } from "../src/GovernableFund.sol";
+import { Script } from "forge-std/src/Script.sol";
 
-import { BaseScript } from "./Base.s.sol";
 import "forge-std/src/console.sol";
 
-contract DeployScript is BaseScript {
+contract DeployScript is Script {
   uint256 public TOT_SUPPLY = 18_200_000 * 1e18;
   bytes32 public MERKLE_ROOT = 0x6edd0eecc77bf89794e0bb315c26a5ef4d308ea41ef05ae7fbe85d4fda84e83a;
   uint256 public TOT_DISTRIBUTION = 9_385_579 * 1e18;
   address public DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
+
+  modifier broadcast() {
+    vm.startBroadcast();
+    _;
+    vm.stopBroadcast();
+  }
 
   function run() public broadcast {
     // forge script ./script/Deploy.s.sol \

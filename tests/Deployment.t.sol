@@ -4,6 +4,8 @@ pragma solidity >=0.8.28 <0.9.0;
 import { Test } from "forge-std/src/Test.sol";
 import { console2 } from "forge-std/src/console2.sol";
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Pareto } from "../src/Pareto.sol";
 import { ParetoGovernor } from "../src/ParetoGovernor.sol";
 import { ParetoTimelock } from "../src/ParetoTimelock.sol";
@@ -20,6 +22,7 @@ contract TestDeployment is Test, DeployScript {
   MerkleClaim merkle;
   GovernableFund longTermFund;
   address public TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
+  address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
   function setUp() public virtual {
     vm.createSelectFork("mainnet", 21836743);
@@ -142,10 +145,18 @@ contract TestDeployment is Test, DeployScript {
     vm.prank(TL_MULTISIG);
     merkle.enableClaims();
 
+    assertEq(merkle.isClaimActive(), true, 'isClaimActive is wrong');
+
+    vm.expectRevert(bytes("InvalidProof()"));
+    merkle.claim(toTest, amountExpected, new bytes32[](12));
+
     uint256 balPre = par.balanceOf(toTest);
     merkle.claim(toTest, amountExpected, proof);
     uint256 balPost = par.balanceOf(toTest);
     assertEq(balPost - balPre, amountExpected, 'Balance after claim is incorrect');
+
+    vm.expectRevert(bytes("AlreadyClaimed()"));
+    merkle.claim(toTest, amountExpected, proof);
 
     vm.startPrank(address(1));
     vm.expectRevert(bytes("!AUTH"));
@@ -165,5 +176,46 @@ contract TestDeployment is Test, DeployScript {
     vm.stopPrank();
     uint256 balTLPost = par.balanceOf(TL_MULTISIG);
     assertEq(balTLPost - balTLPre, TOT_DISTRIBUTION - amountExpected, 'Balance after sweep is incorrect');
+  }
+
+  function testGovernableFund() external {
+    // we deploy a new GovernableFund with this contract as owner
+    GovernableFund govFund = new GovernableFund(address(this));
+    assertEq(govFund.owner(), address(this), 'owner is wrong');
+
+    deal(address(govFund), 1 ether);
+    assertEq(address(govFund).balance, 1 ether, 'initial ETH balance is wrong');
+
+    // destination cannot be addr 0
+    vm.expectRevert(bytes("Address is 0"));
+    govFund.transferETH(payable(address(0)), 0.1 ether);
+
+    // only owner can call transferETH
+    vm.startPrank(address(2));
+    vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(2)));
+    govFund.transferETH(payable(address(0)), 0.1 ether);
+    vm.stopPrank();
+
+    uint256 balPre = address(1).balance;
+    govFund.transferETH(payable(address(1)), 0.1 ether);
+    assertEq(address(1).balance - balPre, 0.1 ether, 'ETH balance is wrong after transferETH');
+
+    deal(USDC, address(govFund), 100);
+
+    // only owner can call transfer
+    vm.startPrank(address(2));
+    vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(2)));
+    govFund.transfer(USDC, address(1), 100);
+    vm.stopPrank();
+
+    // token and destination cannot be addr 0
+    vm.expectRevert(bytes("Address is 0"));
+    govFund.transfer(address(0), address(1), 100);
+    vm.expectRevert(bytes("Address is 0"));
+    govFund.transfer(address(1), address(0), 100);
+
+    uint256 usdcBalPre = IERC20(USDC).balanceOf(address(1));
+    govFund.transfer(USDC, address(1), 100);
+    assertEq(IERC20(USDC).balanceOf(address(1)) - usdcBalPre, 100, 'USDC balance is wrong after transfer');
   }
 }

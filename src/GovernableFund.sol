@@ -15,15 +15,26 @@ contract GovernableFund is Ownable {
 
   constructor(address _owner) Ownable(_owner) {}
 
+  /// @notice Transfer tokens held by the contract to another address.
+  /// @param token The address of the token contract.
+  /// @param to The address to transfer tokens to.
+  /// @param value The amount of tokens to transfer.
+  /// @return bool Returns true on success.
   function transfer(address token, address to, uint256 value) external onlyOwner returns (bool) {
     require(token != address(0) && to != address(0), 'Address is 0');
     IERC20(token).safeTransfer(to, value);
     return true;
   }
+
+  /// @notice Transfer ETH held by the contract to another address.
+  /// @param to The address to transfer ETH to.
+  /// @param value The amount of ETH to transfer.
+  /// @dev Reverts if the transfer fails.
   function transferETH(address payable to, uint256 value) onlyOwner external {
     require(to != address(0), 'Address is 0');
     to.sendValue(value);
   }
 
+  /// @notice Allow the contract to receive ETH.
   receive() external payable {}
 }
