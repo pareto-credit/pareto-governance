@@ -9,7 +9,8 @@
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.1",
     "@openzeppelin/contracts-upgradeable": "^5.2.0",
-    "@openzeppelin/merkle-tree": "^1.0.7"
+    "@openzeppelin/merkle-tree": "^1.0.7",
+    "ve8020-launchpad": "github:protofire/ve8020-launchpad#c114599e9addebd07a4c3fa533f542e6cd0c4603"
   },
   "devDependencies": {
     "forge-std": "github:foundry-rs/forge-std#v1.8.1",

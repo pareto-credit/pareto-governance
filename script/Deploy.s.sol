@@ -6,15 +6,12 @@ import { ParetoGovernor } from "../src/ParetoGovernor.sol";
 import { ParetoTimelock } from "../src/ParetoTimelock.sol";
 import { MerkleClaim } from "../src/MerkleClaim.sol";
 import { GovernableFund } from "../src/GovernableFund.sol";
+import { ParetoConstants } from "../src/utils/ParetoConstants.sol";
 import { Script } from "forge-std/src/Script.sol";
 
 import "forge-std/src/console.sol";
 
-contract DeployScript is Script {
-  uint256 public TOT_SUPPLY = 18_200_000 * 1e18;
-  bytes32 public MERKLE_ROOT = 0x6edd0eecc77bf89794e0bb315c26a5ef4d308ea41ef05ae7fbe85d4fda84e83a;
-  uint256 public TOT_DISTRIBUTION = 9_385_579 * 1e18;
-  address public DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
+contract DeployScript is Script, ParetoConstants {
 
   modifier broadcast() {
     vm.startBroadcast();
@@ -76,14 +73,15 @@ contract DeployScript is Script {
 
     // transfer TOT_DISTRIBUTION to MerkleClaim
     par.transfer(address(merkle), TOT_DISTRIBUTION);
-    console.log('Transfered', TOT_DISTRIBUTION, 'Pareto to MerkleClaim');
+    console.log('Transferred to MerkleClaim:', TOT_DISTRIBUTION);
 
     // transfer the rest to GovernableFund
     par.transfer(address(longTermFund), TOT_SUPPLY - TOT_DISTRIBUTION);
-    console.log('Transfered', TOT_SUPPLY - TOT_DISTRIBUTION, 'Pareto to GovernableFund');
+    console.log('Transferred to GovernableFund:', TOT_SUPPLY - TOT_DISTRIBUTION);
 
     // activate claims with TL_MULTISIG if needed
     // merkle.enableClaims(); // activate claim
     console.log('NOTE: activate claims with TL_MULTISIG if needed');
+    console.log('NOTE: deploy the ve system separately via DeployVeSystem.s.sol once the 80/20 BPT is live');
   }
 }

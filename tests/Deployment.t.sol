@@ -2,7 +2,6 @@
 pragma solidity >=0.8.28 <0.9.0;
 
 import { Test } from "forge-std/src/Test.sol";
-import { console2 } from "forge-std/src/console2.sol";
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
@@ -13,6 +12,10 @@ import { MerkleClaim } from "../src/MerkleClaim.sol";
 import { GovernableFund } from "../src/GovernableFund.sol";
 
 import { DeployScript } from "../script/Deploy.s.sol";
+import { IBalancerVotingEscrow } from "../src/staking/interfaces/IBalancerVotingEscrow.sol";
+import { ILaunchpad } from "../src/staking/interfaces/ILaunchpad.sol";
+import { IRewardDistributorMinimal } from "../src/staking/interfaces/IRewardDistributorMinimal.sol";
+import { IRewardFaucetMinimal } from "../src/staking/interfaces/IRewardFaucetMinimal.sol";
 import { IGovernor } from "@openzeppelin/contracts/governance/IGovernor.sol";
 
 contract TestDeployment is Test, DeployScript {
@@ -21,14 +24,41 @@ contract TestDeployment is Test, DeployScript {
   ParetoGovernor governor;
   MerkleClaim merkle;
   GovernableFund longTermFund;
-  address public TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
+  IBalancerVotingEscrow votingEscrow;
+  address rewardDistributor;
+  address rewardFaucet;
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+  address public constant PARETO_BPT_FOR_TEST = 0x114907c2a07978c38EbB9F9F6A5261a846B79521;
+  uint256 internal rewardStartTime;
+
+  struct VeDeployParams {
+    address tokenBptAddr;
+    address rewardReceiver;
+    uint256 rewardDistributorStartTime;
+    address adminUnlockAll;
+    address adminEarlyUnlock;
+  }
 
   function setUp() public virtual {
-    vm.createSelectFork("mainnet", 21836743);
+    vm.createSelectFork("mainnet", 23382014);
 
     vm.startPrank(DEPLOYER);
     (par, timelock, governor, merkle, longTermFund) = _deploy();
+
+    rewardStartTime = block.timestamp + REWARD_START_DELAY;
+
+    address ve;
+    (ve, rewardDistributor, rewardFaucet) = ILaunchpad(LAUNCHPAD).deploy(
+      PARETO_BPT_FOR_TEST,
+      VE_NAME,
+      VE_SYMBOL,
+      MAX_LOCK_TIME,
+      rewardStartTime,
+      ADMIN_UNLOCK_ALL,
+      ADMIN_EARLY_UNLOCK,
+      DEPLOYER
+    );
+    votingEscrow = IBalancerVotingEscrow(ve);
     vm.stopPrank();
 
     skip(100);
@@ -59,6 +89,35 @@ contract TestDeployment is Test, DeployScript {
     assertEq(merkle.token(), address(par), 'merkle token is wrong');
     assertEq(merkle.merkleRoot(), MERKLE_ROOT, 'merkleRoot is wrong');
     assertEq(merkle.deployTime(), block.timestamp - 100, 'deployTime is wrong');
+
+    assertEq(votingEscrow.token(), PARETO_BPT_FOR_TEST, 'VotingEscrow token is wrong');
+    assertEq(votingEscrow.rewardReceiver(), DEPLOYER, 'VotingEscrow reward receiver is wrong');
+    assertEq(votingEscrow.rewardReceiverChangeable(), true, 'VotingEscrow reward receiver changeable flag is wrong');
+    assertEq(votingEscrow.MAXTIME(), MAX_LOCK_TIME, 'VotingEscrow max lock time is wrong');
+  }
+
+  function testVeSystemConfiguration() external view {
+    address expectedBalToken = ILaunchpad(LAUNCHPAD).balToken();
+    address expectedBalMinter = ILaunchpad(LAUNCHPAD).balMinter();
+
+    assertEq(votingEscrow.admin(), DEPLOYER, 'VotingEscrow admin is wrong');
+    assertEq(votingEscrow.admin_unlock_all(), ADMIN_UNLOCK_ALL, 'VotingEscrow unlock-all admin is wrong');
+    assertEq(votingEscrow.admin_early_unlock(), ADMIN_EARLY_UNLOCK, 'VotingEscrow early-unlock admin is wrong');
+    assertEq(votingEscrow.rewardDistributor(), rewardDistributor, 'VotingEscrow reward distributor is wrong');
+    assertEq(votingEscrow.balToken(), expectedBalToken, 'VotingEscrow BAL token is wrong');
+    assertEq(votingEscrow.balMinter(), expectedBalMinter, 'VotingEscrow BAL minter is wrong');
+
+    IRewardDistributorMinimal distributor = IRewardDistributorMinimal(rewardDistributor);
+    uint256 expectedStart = rewardStartTime - (rewardStartTime % 1 weeks);
+    assertEq(distributor.admin(), DEPLOYER, 'RewardDistributor admin is wrong');
+    assertEq(distributor.rewardFaucet(), rewardFaucet, 'RewardDistributor faucet is wrong');
+    assertEq(distributor.isInitialized(), true, 'RewardDistributor not initialized');
+    assertEq(distributor.getVotingEscrow(), address(votingEscrow), 'RewardDistributor VE link is wrong');
+    assertEq(distributor.getTimeCursor(), expectedStart, 'RewardDistributor start cursor is wrong');
+
+    IRewardFaucetMinimal faucet = IRewardFaucetMinimal(rewardFaucet);
+    assertEq(faucet.isInitialized(), true, 'RewardFaucet not initialized');
+    assertEq(faucet.rewardDistributor(), rewardDistributor, 'RewardFaucet distributor link is wrong');
   }
 
   function testProposal() external {
