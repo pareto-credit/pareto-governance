@@ -60,7 +60,7 @@ contract TestDeployment is Test, DeployScript {
     skip(100);
   }
 
-  function testDeploy() external view {
+  function test_Deploy() external view {
     assertEq(par.totalSupply(), TOT_SUPPLY, 'totalSupply is wrong');
     assertEq(par.balanceOf(DEPLOYER), 0, 'DEPLOYER balance is wrong');
     assertEq(par.clock(), uint48(block.timestamp), 'clock is wrong');
@@ -80,7 +80,7 @@ contract TestDeployment is Test, DeployScript {
     assertEq(votingEscrow.MAXTIME(), MAX_LOCK_TIME, 'VotingEscrow max lock time is wrong');
   }
 
-  function testVeSystemConfiguration() external view {
+  function test_VeSystemConfiguration() external view {
     address expectedBalToken = ILaunchpad(LAUNCHPAD).balToken();
     address expectedBalMinter = ILaunchpad(LAUNCHPAD).balMinter();
 
@@ -104,7 +104,7 @@ contract TestDeployment is Test, DeployScript {
     assertEq(faucet.rewardDistributor(), rewardDistributor, 'RewardFaucet distributor link is wrong');
   }
 
-  function testMerkleDistribution() external {
+  function test_MerkleDistribution() external {
     address toTest = 0x3675D2A334f17bCD4689533b7Af263D48D96eC72;
     uint256 amountExpected = 1_000_000 * 1e18;
     bytes32[] memory proof = new bytes32[](12);
@@ -166,7 +166,7 @@ contract TestDeployment is Test, DeployScript {
     assertEq(balTLPost - balTLPre, TOT_DISTRIBUTION - amountExpected, 'Balance after sweep is incorrect');
   }
 
-  function testGovernableFund() external {
+  function test_GovernableFund() external {
     // we deploy a new GovernableFund with this contract as owner
     GovernableFund govFund = new GovernableFund(address(this));
     assertEq(govFund.owner(), address(this), 'owner is wrong');
