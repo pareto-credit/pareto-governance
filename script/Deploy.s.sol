@@ -2,23 +2,14 @@
 pragma solidity 0.8.28;
 
 import { Pareto } from "../src/Pareto.sol";
-import { ParetoGovernor } from "../src/ParetoGovernor.sol";
-import { ParetoTimelock } from "../src/ParetoTimelock.sol";
 import { MerkleClaim } from "../src/MerkleClaim.sol";
 import { GovernableFund } from "../src/GovernableFund.sol";
 import { ParetoConstants } from "../src/utils/ParetoConstants.sol";
 import { Script } from "forge-std/src/Script.sol";
+import { BaseScript } from "../script/BaseScript.s.sol";
+import { console } from "forge-std/src/console.sol";
 
-import "forge-std/src/console.sol";
-
-contract DeployScript is Script, ParetoConstants {
-
-  modifier broadcast() {
-    vm.startBroadcast();
-    _;
-    vm.stopBroadcast();
-  }
-
+contract DeployScript is Script, BaseScript, ParetoConstants {
   function run() public broadcast {
     // forge script ./script/Deploy.s.sol \
     // --fork-url $ETH_RPC_URL \
@@ -31,14 +22,11 @@ contract DeployScript is Script, ParetoConstants {
     // --sender "0xE5Dab8208c1F4cce15883348B72086dBace3e64B" \
     // --slow \
     // -vvv
-
     _deploy();
   }
 
   function _deploy() public returns (
     Pareto par,
-    ParetoTimelock timelock,
-    ParetoGovernor governor,
     MerkleClaim merkle,
     GovernableFund longTermFund
   ) {
@@ -46,24 +34,8 @@ contract DeployScript is Script, ParetoConstants {
     par = new Pareto();
     console.log('Pareto deployed at:', address(par));
 
-    // Deploy Timelock
-    // pre-compute governor address
-    address governorAddr = vm.computeCreateAddress(DEPLOYER, vm.getNonce(DEPLOYER) + 1);
-    uint256 minDelay = 2 days;
-    address[] memory proposers = new address[](1);
-    proposers[0] = governorAddr; // only governor can propose
-    address[] memory executors = new address[](1);
-    executors[0] = address(0); // anyone can execute
-    timelock = new ParetoTimelock(minDelay, proposers, executors);
-    console.log('ParetoTimelock deployed at:', address(timelock));
-
-    // Deploy Governor
-    governor = new ParetoGovernor(par, timelock);
-    console.log('ParetoGovernor deployed at:', address(governor));
-    require(governorAddr == address(governor), 'Governor address mismatch');
-
     // Deploy GovernableFund
-    longTermFund = new GovernableFund(address(timelock));
+    longTermFund = new GovernableFund(TL_MULTISIG);
     console.log('GovernableFund deployed at:', address(longTermFund));
 
     // Deploy MerkleClaim
