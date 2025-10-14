@@ -229,7 +229,8 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     timelock.grantRole(timelock.CANCELLER_ROLE(), address(governor));
     timelock.renounceRole(timelock.DEFAULT_ADMIN_ROLE(), address(this));
 
-    votesAggregator.transferOwnership(address(timelock));
+    // Transfer ownerships to TL_MULTISIG so weights can be changed if needed
+    votesAggregator.transferOwnership(TL_MULTISIG);
   }
 }
 

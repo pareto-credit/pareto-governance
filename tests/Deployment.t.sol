@@ -255,7 +255,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     _fund8020Votes(VOTER, VOTER_TOKENS);
 
     // we set the ratio to be 0 for PAR
-    vm.prank(address(timelock));
+    vm.prank(TL_MULTISIG);
     votesAggregator.updateWeights(0, 10_000);
 
     _doProposal();
@@ -278,7 +278,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     // so we set the weights accordingly
     // ie 1 BPT = 5.7 PAR = 1 vote => 1 PAR = 1/5.7 votes
     uint256 ratio = 10_000 * 1e18 / PAR_SEED_AMOUNT;
-    vm.prank(address(timelock));
+    vm.prank(TL_MULTISIG);
     votesAggregator.updateWeights(ratio, 10_000);
 
     _advanceTime(1);
