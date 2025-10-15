@@ -72,7 +72,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
   function _deployCore() internal {
     bytes32 parSalt = _selectParSalt();
     par = new Pareto{salt: parSalt}();
-    longTermFund = new GovernableFund(TL_MULTISIG);
+    longTermFund = new GovernableFund(address(this));
 
     require(MERKLE_ROOT != bytes32(0), "Deploy:merkle-root-zero");
     merkle = new MerkleClaim(MERKLE_ROOT, address(par));
@@ -231,6 +231,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
 
     // Transfer ownerships to TL_MULTISIG so weights can be changed if needed
     votesAggregator.transferOwnership(TL_MULTISIG);
+    longTermFund.transferOwnership(address(timelock));
   }
 }
 
@@ -264,9 +265,10 @@ contract DeployScript is Script, ParetoConstants {
     VeVotesAdapter veVotesAdapter,
     VotesAggregator votesAggregator,
     TimelockController timelock,
-    ParetoGovernorHybrid governor
+    ParetoGovernorHybrid governor,
+    ParetoDeployOrchestrator orchestrator
   ) {
-    ParetoDeployOrchestrator orchestrator = new ParetoDeployOrchestrator{value: WETH_SEED_AMOUNT}();
+    orchestrator = new ParetoDeployOrchestrator{value: WETH_SEED_AMOUNT}();
 
     par = orchestrator.par();
     merkle = orchestrator.merkle();
@@ -300,7 +302,6 @@ contract DeployScript is Script, ParetoConstants {
   }
 
   function _postDeploy() internal view {
-    console.log("### NOTE: change admin of GovernableFund to timelock");
     console.log("### NOTE: activate claims with TL_MULTISIG if needed with merkle.enableClaims()");
     console.log("");
   }

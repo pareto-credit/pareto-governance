@@ -33,6 +33,10 @@ contract MerkleClaim {
   error InvalidProof();
   /// @notice Thrown if claim is not active
   error ClaimNotActive();
+  /// @notice Thrown if caller is not authorized
+  error Unauthorized();
+  /// @notice Thrown if called too early
+  error TooEarly();
 
   /// ============ Initializer ========
 
@@ -72,16 +76,16 @@ contract MerkleClaim {
 
   /// @notice Allows the multisig to sweep tokens after 60 days
   function sweep() external {
-    require(msg.sender == TL_MULTISIG, '!AUTH');
+    if (msg.sender != TL_MULTISIG) revert Unauthorized();
     // allow sweep after 60 days
-    require(block.timestamp > deployTime + 60 days, 'TOO_EARLY');
+    if (block.timestamp < deployTime + 60 days) revert TooEarly();
     address _token = token;
     IERC20(_token).transfer(msg.sender, IERC20(_token).balanceOf(address(this)));
   }
 
   /// @notice Allows the multisig to toggle claim active state
   function enableClaims() external {
-    require(msg.sender == TL_MULTISIG, '!AUTH');
+    if (msg.sender != TL_MULTISIG) revert Unauthorized();
     isClaimActive = true;
   }
 }

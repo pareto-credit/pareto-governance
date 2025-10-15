@@ -25,6 +25,7 @@ import { IBalancerRouter } from "../src/staking/interfaces/IBalancerRouter.sol";
 import { IGovernor } from "@openzeppelin/contracts/governance/IGovernor.sol";
 import { ParetoConstants } from "../src/utils/ParetoConstants.sol";
 import { console2 } from "forge-std/src/console2.sol";
+import { ParetoDeployOrchestrator } from "../script/Deploy.s.sol";
 
 contract TestDeployment is Test, ParetoConstants, DeployScript {
   bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
@@ -50,6 +51,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   VotesAggregator votesAggregator;
   ParetoGovernorHybrid governor;
   TimelockController timelock;
+  ParetoDeployOrchestrator orchestrator;
   uint256 internal rewardStartTime;
   bool internal proposalExecuted;
 
@@ -60,7 +62,8 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     (
       par, merkle, longTermFund, 
       votingEscrow, rewardDistributor, rewardFaucet, bpt, lens,
-      veVotesAdapter, votesAggregator, timelock, governor
+      veVotesAdapter, votesAggregator, timelock, governor,
+      orchestrator
     ) = _fullDeploy();
     vm.stopPrank();
 
@@ -90,7 +93,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(par.clock(), uint48(block.timestamp), 'clock is wrong');
     assertEq(par.CLOCK_MODE(), "mode=timestamp", 'CLOCK_MODE is wrong');
 
-    assertEq(longTermFund.owner(), TL_MULTISIG, 'owner is wrong');
+    assertEq(longTermFund.owner(), address(timelock), 'owner is wrong');
     assertEq(par.balanceOf(address(longTermFund)), TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT, 'initial balance is wrong');
 
     assertEq(par.balanceOf(address(merkle)), TOT_DISTRIBUTION, 'merkle balance is wrong');
@@ -164,11 +167,11 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     proof[11] = 0x1c02f46c754c2a851eb33fcb4be3739cc2b8af15c1059d135244abc87f935d03;
     
     // claim is not activated by default
-    vm.expectRevert(bytes("ClaimNotActive()"));
+    vm.expectRevert(MerkleClaim.ClaimNotActive.selector);
     merkle.claim(toTest, amountExpected, proof);
 
     // try to activate claim with wrong wallet
-    vm.expectRevert(bytes("!AUTH"));
+    vm.expectRevert(MerkleClaim.Unauthorized.selector);
     merkle.enableClaims();
 
     // activate claims
@@ -177,7 +180,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
 
     assertEq(merkle.isClaimActive(), true, 'isClaimActive is wrong');
 
-    vm.expectRevert(bytes("InvalidProof()"));
+    vm.expectRevert(MerkleClaim.InvalidProof.selector);
     merkle.claim(toTest, amountExpected, new bytes32[](12));
 
     uint256 balPre = par.balanceOf(toTest);
@@ -185,16 +188,16 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     uint256 balPost = par.balanceOf(toTest);
     assertEq(balPost - balPre, amountExpected, 'Balance after claim is incorrect');
 
-    vm.expectRevert(bytes("AlreadyClaimed()"));
+    vm.expectRevert(MerkleClaim.AlreadyClaimed.selector);
     merkle.claim(toTest, amountExpected, proof);
 
     vm.startPrank(address(1));
-    vm.expectRevert(bytes("!AUTH"));
+    vm.expectRevert(MerkleClaim.Unauthorized.selector);
     merkle.sweep();
     vm.stopPrank();
 
     vm.startPrank(TL_MULTISIG);
-    vm.expectRevert(bytes("TOO_EARLY"));
+    vm.expectRevert(MerkleClaim.TooEarly.selector);
     merkle.sweep();
     vm.stopPrank();
 
@@ -217,7 +220,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(address(govFund).balance, 1 ether, 'initial ETH balance is wrong');
 
     // destination cannot be addr 0
-    vm.expectRevert(bytes("Address is 0"));
+    vm.expectRevert(GovernableFund.AddressZero.selector);
     govFund.transferETH(payable(address(0)), 0.1 ether);
 
     // only owner can call transferETH
@@ -239,9 +242,9 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.stopPrank();
 
     // token and destination cannot be addr 0
-    vm.expectRevert(bytes("Address is 0"));
+    vm.expectRevert(GovernableFund.AddressZero.selector);
     govFund.transfer(address(0), address(1), 100);
-    vm.expectRevert(bytes("Address is 0"));
+    vm.expectRevert(GovernableFund.AddressZero.selector);
     govFund.transfer(address(1), address(0), 100);
 
     uint256 usdcBalPre = IERC20(USDC).balanceOf(address(1));
@@ -344,7 +347,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     amounts[1] = 50_000 * 1e6; // USDC
     amounts[2] = 10_000 * 1e18; // BAL
 
-    vm.prank(TL_MULTISIG);
+    vm.prank(address(timelock));
     longTermFund.transfer(address(par), TL_MULTISIG, amounts[0]);
     deal(USDC, TL_MULTISIG, amounts[1]);
     deal(BAL, TL_MULTISIG, amounts[2]);
@@ -385,7 +388,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
     skip(1 weeks + 1);
 
-    vm.prank(TL_MULTISIG);
+    vm.prank(address(timelock));
     longTermFund.transfer(address(par), TL_MULTISIG, 100_000 * 1e18);
 
     // schedule Par rewards for 2 weeks
@@ -425,7 +428,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
     skip(1 weeks + 1);
 
-    vm.prank(TL_MULTISIG);
+    vm.prank(address(timelock));
     longTermFund.transfer(address(par), TL_MULTISIG, 100_000 * 1e18);
 
     // schedule Par rewards for 2 weeks
@@ -498,7 +501,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   /// @dev amount is PAR amount to add as liquidity
   function _fund8020Votes(address account, uint256 amount) internal returns (uint256 bptBal) {
     // give PAR to the account
-    vm.prank(TL_MULTISIG);
+    vm.prank(address(timelock));
     longTermFund.transfer(address(par), account, amount);
 
     // deal WETH to the account
@@ -550,7 +553,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function _fundAndDelegate(address account, uint256 amount) internal {
-    vm.prank(TL_MULTISIG);
+    vm.prank(address(timelock));
     longTermFund.transfer(address(par), account, amount);
 
     vm.prank(account);
