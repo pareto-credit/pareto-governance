@@ -15,6 +15,7 @@ abstract contract ParetoConstants {
   // Ve-system deployment parameters
   address public constant LAUNCHPAD = 0x41b5b45f849a39CF7ac4aceAe6C78A72e3852133;
   address public constant BALANCER_FACTORY = 0x201efd508c8DfE9DE1a13c2452863A78CB2a86Cc;
+  address payable public constant BALANCER_VAULT = payable(0xbA1333333333a1BA1108E8412f11850A5C319bA9);
   address internal constant BAL_ROUTER = 0x5C6fb490BDFD3246EB0bB062c168DeCAF4bD9FDd;
   address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
   address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;

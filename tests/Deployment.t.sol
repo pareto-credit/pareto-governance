@@ -17,6 +17,7 @@ import { DeployScript } from "../script/Deploy.s.sol";
 import { IBalancerVotingEscrow } from "../src/staking/interfaces/IBalancerVotingEscrow.sol";
 import { ILaunchpad } from "../src/staking/interfaces/ILaunchpad.sol";
 import { IBalancerWeightedPool } from "../src/staking/interfaces/IBalancerWeightedPool.sol";
+import { IBalancerVault } from "../src/staking/interfaces/IBalancerVault.sol";
 import { IRewardDistributorMinimal } from "../src/staking/interfaces/IRewardDistributorMinimal.sol";
 import { IRewardFaucetMinimal } from "../src/staking/interfaces/IRewardFaucetMinimal.sol";
 import { LensReward } from "ve8020-launchpad/contracts/LensReward.sol";
@@ -25,7 +26,7 @@ import { IBalancerRouter } from "../src/staking/interfaces/IBalancerRouter.sol";
 import { IGovernor } from "@openzeppelin/contracts/governance/IGovernor.sol";
 import { ParetoConstants } from "../src/utils/ParetoConstants.sol";
 import { console2 } from "forge-std/src/console2.sol";
-import { ParetoDeployOrchestrator } from "../script/Deploy.s.sol";
+import { ParetoDeployOrchestrator } from "../src/deployment/ParetoDeployOrchestrator.sol";
 
 contract TestDeployment is Test, ParetoConstants, DeployScript {
   bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
@@ -37,6 +38,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   uint256 internal constant SIGNING_PRIVATE_KEY = 0xA11CE;
   uint256 internal constant PROPOSER_TOKENS = 500_000 * 1e18;
   uint256 internal constant VOTER_TOKENS = 1_000_000 * 1e18;
+  IBalancerVault internal constant balancerVault = IBalancerVault(BALANCER_VAULT);
 
   Pareto par;
   MerkleClaim merkle;
@@ -67,6 +69,10 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     ) = _fullDeploy();
     vm.stopPrank();
 
+    vm.startPrank(TL_MULTISIG);
+    IBalancerVault(BALANCER_VAULT).pausePool(address(bpt));
+    vm.stopPrank();
+
     rewardStartTime = block.timestamp + REWARD_START_DELAY;
     skip(100);
 
@@ -87,11 +93,17 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.label(address(governor), "Governor");
   }
 
-  function testFork_Deploy() external view {
+  function testFork_Deploy() external {
+    vm.expectRevert("Deploy:wrong-eth-amount");
+    new ParetoDeployOrchestrator{value: 1}();
+
+    assertEq(par.name(), "Pareto", 'name is wrong');
+    assertEq(par.symbol(), "PAR", 'symbol is wrong');
     assertEq(par.totalSupply(), TOT_SUPPLY, 'totalSupply is wrong');
     assertEq(par.balanceOf(DEPLOYER), 0, 'DEPLOYER balance is wrong');
     assertEq(par.clock(), uint48(block.timestamp), 'clock is wrong');
     assertEq(par.CLOCK_MODE(), "mode=timestamp", 'CLOCK_MODE is wrong');
+    assertEq(par.nonces(address(orchestrator)), 0, 'nonce is wrong');
 
     assertEq(longTermFund.owner(), address(timelock), 'owner is wrong');
     assertEq(par.balanceOf(address(longTermFund)), TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT, 'initial balance is wrong');
@@ -115,9 +127,14 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(bptWeights.length, 2, 'BPT weights length is wrong');
     assertEq(bptWeights[1], ONE * 80 / 100, 'BPT weight 0 is wrong');
     assertEq(bptWeights[0], ONE * 20 / 100, 'BPT weight 1 is wrong');
+    IBalancerVault.PoolRoleAccounts memory roles = balancerVault.getPoolRoleAccounts(address(bpt));
+    assertEq(roles.pauseManager, TL_MULTISIG, 'BPT pause manager is wrong');
+    assertEq(roles.swapFeeManager, TL_MULTISIG, 'BPT swap fee manager is wrong');
+    (bool paused,,, ) = balancerVault.getPoolPausedState(address(bpt));
+    assertEq(paused, true, 'BPT paused status is wrong');
     assertEq(bpt.getStaticSwapFeePercentage(), 0.05e16, 'BPT swap fee is wrong'); // 0.1%
     assertEq(bpt.getVault(), 0xbA1333333333a1BA1108E8412f11850A5C319bA9, 'BPT vault is wrong');
-    
+    assertGt(IERC20(address(bpt)).balanceOf(DEPLOYER), 0, 'DEPLOYER BPT balance is wrong');
     // test votingEscrow params
     assertEq(votingEscrow.token(), address(bpt), 'VotingEscrow token is wrong');
     assertEq(votingEscrow.name(), VE_NAME, 'VotingEscrow name is wrong');
@@ -253,6 +270,10 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function testFork_GovernorProposeVoteExecuteFlow_StakedPAR() external {
+    vm.startPrank(TL_MULTISIG);
+    IBalancerVault(BALANCER_VAULT).unpausePool(address(bpt));
+    vm.stopPrank();
+
     // The ratio PAR:BPT is about 5.7:1
     _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
     _fund8020Votes(VOTER, VOTER_TOKENS);
@@ -272,6 +293,10 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function testFork_GovernorProposeVoteExecuteFlow_StakedPARAndPlainPAR() external {
+    vm.startPrank(TL_MULTISIG);
+    IBalancerVault(BALANCER_VAULT).unpausePool(address(bpt));
+    vm.stopPrank();
+
     uint256 proposerBpt = _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
     uint256 voterBpt = _fund8020Votes(VOTER, VOTER_TOKENS);
     _fundAndDelegate(PROPOSER, PROPOSER_TOKENS);
@@ -332,6 +357,9 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function testFork_RewardsDistributor() external {
+    vm.startPrank(TL_MULTISIG);
+    IBalancerVault(BALANCER_VAULT).unpausePool(address(bpt));
+    vm.stopPrank();
     // move after rewardStart time
     _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
     skip(1 weeks + 1);
@@ -384,6 +412,9 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function testFork_RewardFaucet() external {
+    vm.startPrank(TL_MULTISIG);
+    IBalancerVault(BALANCER_VAULT).unpausePool(address(bpt));
+    vm.stopPrank();
     // move after rewardStart time
     _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
     skip(1 weeks + 1);
@@ -424,6 +455,9 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function testFork_RewardFaucet_SkipClaim() external {
+    vm.startPrank(TL_MULTISIG);
+    IBalancerVault(BALANCER_VAULT).unpausePool(address(bpt));
+    vm.stopPrank();
     // move after rewardStart time
     _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
     skip(1 weeks + 1);

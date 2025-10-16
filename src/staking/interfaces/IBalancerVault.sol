@@ -268,4 +268,8 @@ interface IBalancerVault {
     function transfer(address owner, address to, uint256 amount) external returns (bool);
     function transferFrom(address spender, address from, address to, uint256 amount) external returns (bool);
     function unlock(bytes memory data) external returns (bytes memory result);
+    function pausePool(address pool) external;
+    function unpausePool(address pool) external;
+    function getPoolPausedState(address pool) external view returns (bool,uint32,uint32,address);
+    function getPoolRoleAccounts(address pool) external view returns (PoolRoleAccounts memory);
 }
