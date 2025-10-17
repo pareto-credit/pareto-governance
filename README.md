@@ -8,7 +8,7 @@
 ## Overview
 PAR is the governance token of Pareto.Credit. The entire 18.2M supply is minted once at launch, with a portion routed to a Merkle airdrop for the community and the remainder secured inside a treasury that the DAO can unlock over time. Claims stay disabled until the multisig gives the green light, ensuring the distribution kicks off only when supporting infrastructure and communications are ready.
 
-Once circulating, PAR is paired with WETH in a Balancer 80/20 pool to establish deep liquidity. Liquidity providers can lock their pool tokens inside a ve8020 voting escrow to receive vePAR balances that decay gradually, capturing both the size of the deposit and the length of the commitment. These lockers are also eligible for protocol emissions, distributed through a rewards system that can stream BAL, PAR, and USDC as incentives.
+To align long-term incentives with on-chain governance, PAR is paired with WETH in a Balancer 80/20 pool to establish deep liquidity. Liquidity providers can lock their pool tokens inside a ve8020 voting escrow to receive vePAR balances that decay gradually, capturing both the size of the deposit and the length of the commitment. These ve balances are non-transferable by design but are eligible for protocol emissions, distributed through a rewards system that can stream BAL, PAR, and USDC as incentives.
 
 Governance combines votes from liquid PAR holders and vePAR lockers. A lightweight adapter reads ve balances, an aggregator blends them with ERC20Votes weighting, and a hybrid governor checks quorum, enforces proposal thresholds, and routes successful decisions through a timelock. The same timelock controls the treasury fund and reward distributor, meaning every material change—allocating reserves, updating incentives, or adjusting vote weights—follows a transparent, delayed execution path. Deployment scripts, fork tests, and Merkle tooling round out the stack so teams can rehearse upgrades, audits, and launches with predictable results.
 
@@ -35,12 +35,11 @@ Governance combines votes from liquid PAR holders and vePAR lockers. A lightweig
 - The timelock owns the treasury and reward distributor, so every meaningful change passes through a delay and on-chain execution.
 
 ## Deployment Flow (`script/Deploy.s.sol`)
-1. **Input validation** – Asserts valid aggregator weights, non-empty Merkle root, and sufficient ETH for pool seeding.
+1. **Input validation** – Asserts valid aggregator weights, non-empty Merkle root, and that the caller supplies exactly `WETH_SEED_AMOUNT` wei for pool seeding.
 2. **Core contracts** – Deploys PAR via `CREATE2` (address sorted against WETH), `GovernableFund`, and `MerkleClaim`; distributes PAR supply.
 3. **80/20 pool** – Creates the Balancer pool with 80% PAR / 20% WETH, seeds liquidity, and hands manager roles to the TL multisig.
 4. **ve launchpad** – Deploys voting escrow + rewards components, whitelists BAL/PAR/USDC rewards, and transfers control to the TL multisig.
-5. **Governance stack** – Deploys adapter, aggregator, timelock, and governor; wires roles, then transfers aggregator ownership to the TL multisig.
-6. **Refund** – Sends back excess ETH after meeting the WETH seed requirement.
+5. **Governance stack** – Deploys adapter, aggregator, timelock, and governor; wires roles, transfers the long-term fund to the timelock, and hands aggregator ownership to the TL multisig.
 
 `DeployScript.run()` broadcasts the orchestrator transaction. `_fullDeploy()` is used in tests to capture deployed addresses and assert configuration.
 
@@ -118,7 +117,7 @@ forge script script/Deploy.s.sol \
 ```
 
 Key considerations:
-- The orchestrator requires at least `WETH_SEED_AMOUNT` ETH (default `0.001 ETH`) to seed the Balancer pool; extra ETH is refunded.
+- The orchestrator requires exactly `WETH_SEED_AMOUNT` ETH (default `0.001 ETH`) to seed the Balancer pool; providing any other amount reverts.
 - Ensure the deploying account can approve Permit2 and has set the required allowances if re-running sections manually.
 - Verify the on-chain addresses logged by the script match expectations, then store them for coordination with multisig signers and downstream services.
 
