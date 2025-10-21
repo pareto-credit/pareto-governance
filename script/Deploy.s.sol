@@ -45,6 +45,7 @@ contract DeployScript is Script, ParetoConstants {
     Pareto par,
     MerkleClaim merkle,
     GovernableFund longTermFund,
+    GovernableFund teamFund,
     IBalancerVotingEscrow votingEscrow,
     IRewardDistributorMinimal rewardDistributor,
     IRewardFaucetMinimal rewardFaucet,
@@ -64,6 +65,7 @@ contract DeployScript is Script, ParetoConstants {
     par = orchestrator.par();
     merkle = orchestrator.merkle();
     longTermFund = orchestrator.longTermFund();
+    teamFund = orchestrator.teamFund();
     votingEscrow = orchestrator.votingEscrow();
     rewardDistributor = orchestrator.rewardDistributor();
     rewardFaucet = orchestrator.rewardFaucet();
@@ -76,6 +78,7 @@ contract DeployScript is Script, ParetoConstants {
 
     console.log("Pareto deployed at:", address(par));
     console.log("GovernableFund deployed at:", address(longTermFund));
+    console.log("TeamFund deployed at:", address(teamFund));
     console.log("MerkleClaim deployed at:", address(merkle));
     console.log("8020 BPT deployed at:", address(bpt));
     console.log("VotingEscrow deployed at:", address(votingEscrow));

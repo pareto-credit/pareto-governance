@@ -36,6 +36,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
   Pareto public par;
   MerkleClaim public merkle;
   GovernableFund public longTermFund;
+  GovernableFund public teamFund;
   IBalancerVotingEscrow public votingEscrow;
   IRewardDistributorMinimal public rewardDistributor;
   IRewardFaucetMinimal public rewardFaucet;
@@ -64,10 +65,15 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     bytes32 parSalt = _selectParSalt();
     par = new Pareto{salt: parSalt}();
     longTermFund = new GovernableFund(address(this));
+    teamFund = new GovernableFund(TL_MULTISIG);
     merkle = new MerkleClaim(MERKLE_ROOT, address(par));
 
+    // funds reserved for prev IDLE holders, based on snapshot taken in Jan 2024
     par.transfer(address(merkle), TOT_DISTRIBUTION);
-    par.transfer(address(longTermFund), TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT);
+    // Ops reserved (First year emissions + early LP airdrop + DEX/CEX seed liquidity)
+    par.transfer(TL_MULTISIG, TOT_RESERVED_OPS);
+    par.transfer(address(teamFund), TEAM_RESERVE);
+    par.transfer(address(longTermFund), TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE);
   }
 
   /// @dev Select a salt for the Pareto deployment that results in an address

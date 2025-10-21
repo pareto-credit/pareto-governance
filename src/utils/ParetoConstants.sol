@@ -8,6 +8,8 @@ abstract contract ParetoConstants {
   uint256 public constant TOT_SUPPLY = 18_200_000 * ONE;
   bytes32 public constant MERKLE_ROOT = 0x6edd0eecc77bf89794e0bb315c26a5ef4d308ea41ef05ae7fbe85d4fda84e83a;
   uint256 public constant TOT_DISTRIBUTION = 9_385_579 * ONE;
+  uint256 public constant TOT_RESERVED_OPS = TOT_SUPPLY / 10;
+  uint256 public constant TEAM_RESERVE = TOT_SUPPLY / 100 * 6;
   address public constant DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
   address public constant TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;

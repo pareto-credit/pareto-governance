@@ -43,6 +43,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   Pareto par;
   MerkleClaim merkle;
   GovernableFund longTermFund;
+  GovernableFund teamFund;
   IBalancerVotingEscrow votingEscrow;
   IRewardDistributorMinimal rewardDistributor;
   IRewardFaucetMinimal rewardFaucet;
@@ -62,7 +63,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
 
     vm.startPrank(DEPLOYER, DEPLOYER);
     (
-      par, merkle, longTermFund, 
+      par, merkle, longTermFund, teamFund,
       votingEscrow, rewardDistributor, rewardFaucet, bpt, lens,
       veVotesAdapter, votesAggregator, timelock, governor,
       orchestrator
@@ -87,6 +88,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.label(address(rewardFaucet), "RewardFaucet");
     vm.label(address(merkle), "MerkleClaim");
     vm.label(address(longTermFund), "LongTermFund");
+    vm.label(address(teamFund), "TeamFund");
     vm.label(address(veVotesAdapter), "VeVotesAdapter");
     vm.label(address(votesAggregator), "VotesAggregator");
     vm.label(address(timelock), "Timelock");
@@ -106,13 +108,18 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(par.nonces(address(orchestrator)), 0, 'nonce is wrong');
 
     assertEq(longTermFund.owner(), address(timelock), 'owner is wrong');
-    assertEq(par.balanceOf(address(longTermFund)), TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT, 'initial balance is wrong');
-
+    assertEq(teamFund.owner(), TL_MULTISIG, 'owner of team fund is wrong');
+    assertEq(par.balanceOf(address(longTermFund)), TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE, 'initial balance is wrong');
+    assertEq(par.balanceOf(TL_MULTISIG), TOT_RESERVED_OPS, 'TL_MULTISIG balance is wrong');
     assertEq(par.balanceOf(address(merkle)), TOT_DISTRIBUTION, 'merkle balance is wrong');
+    assertEq(par.balanceOf(address(teamFund)), TEAM_RESERVE, 'teamFund balance is wrong');
+
     assertEq(merkle.token(), address(par), 'merkle token is wrong');
     assertEq(merkle.merkleRoot(), MERKLE_ROOT, 'merkleRoot is wrong');
     assertEq(merkle.deployTime(), block.timestamp - 100, 'deployTime is wrong');
     assertEq(merkle.isClaimActive(), false, 'isClaimActive is wrong');
+
+    console2.log('Remaining funds', par.balanceOf(address(longTermFund)) / 1e18);
   }
 
   function testFork_VeSystemConfiguration() external view {
