@@ -289,6 +289,10 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     _fundAndDelegate(PROPOSER, PROPOSER_TOKENS);
     _fundAndDelegate(VOTER, VOTER_TOKENS);
 
+    vm.prank(TL_MULTISIG);
+    votesAggregator.updateWeights(10_000, 10_000);
+    _advanceTime(1);
+
     _doProposal();
   }
 
@@ -324,6 +328,11 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
 
   function testFork_GovernorCastVoteBySig() external {
     _fundAndDelegate(PROPOSER, PROPOSER_TOKENS);
+
+    vm.prank(TL_MULTISIG);
+    votesAggregator.updateWeights(10_000, 10_000);
+
+    _advanceTime(1);
 
     address signer = vm.addr(SIGNING_PRIVATE_KEY);
     uint256 signerVotingPower = governor.quorum(block.timestamp - 1) + 1e18;

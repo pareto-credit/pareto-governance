@@ -20,7 +20,7 @@ Proposals are executed through the `ParetoGovernorHybrid`, an OpenZeppelin-based
 
 ### VotesAggregator (`src/governance/VotesAggregator.sol`)
 - Ownable aggregator that accepts any two `IVotes`-compatible sources (PAR ERC20Votes and the ve adapter).
-- Each source is weighted using basis points (`parWeightBps`, `veWeightBps`); defaults are `10_000` for both, so aggregated voting power is the simple sum of PAR votes and ve votes.
+- Each source is weighted using basis points (`parWeightBps`, `veWeightBps`); defaults is `10_000` for vePAR and `0` for PAR, so only ve holders can vote.
 - Uses `Math.mulDiv` for precise weighting and `try/catch` when querying snapshots so the aggregator tolerates sources that do not implement historical lookups for specific timestamps.
 - Ownership is transferred to the TL_MULTISIG during deployment, ensuring weight updates can be performed easily if needed so to have eg some votes for only ve holders while others for only liquid PAR holders (`updateWeights` guarded by `onlyOwner`).
 - Delegation surfaces remain disabled to prevent conflicting delegation logic across sources.
@@ -36,7 +36,7 @@ Proposals are executed through the `ParetoGovernorHybrid`, an OpenZeppelin-based
 - Uses the timestamp clock to remain consistent with both underlying vote sources.
 
 ## Governance Lifecycle
-- **Proposal Creation**: An address holding ≥ 1% of the aggregated voting supply (liquid PAR + ve power) can propose.
+- **Proposal Creation**: An address holding ≥ 1% of the aggregated voting supply (liquid PAR + ve power if weights are > 0) can propose.
 - **Voting Window**: After a 10-minute delay, voting stays open for 3 days. Support is counted using simple majority (for/against/abstain) inherited from `GovernorCountingSimple`.
 - **Quorum Requirement**: At least 4% of the aggregated historical supply must participate (for + abstain) for the proposal to be valid.
 - **Timelock Execution**: Successful proposals are queued and executed via the `TimelockController` (`TIMELOCK_MIN_DELAY = 2 days`). Roles:

@@ -32,7 +32,7 @@ abstract contract ParetoConstants {
   uint256 public constant PAR_SEED_AMOUNT = (ETH_PRICE * WETH_SEED_AMOUNT / SEED_PRICE) * 4; // pool should be seeded with 80/20 ratio
 
   // Hybrid governance deployment parameters
-  uint256 public constant PAR_WEIGHT_BPS = 10_000;
+  uint256 public constant PAR_WEIGHT_BPS = 0;
   uint256 public constant VE_WEIGHT_BPS = 10_000;
   uint256 public constant TIMELOCK_MIN_DELAY = 2 days;
 }
