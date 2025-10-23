@@ -223,4 +223,9 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     votesAggregator.transferOwnership(TL_MULTISIG);
     longTermFund.transferOwnership(address(timelock));
   }
+
+  function recoverERC20(address token_, address to, uint256 amount) external {
+    require(msg.sender == deployer, "Deploy:only-deployer");
+    IERC20(token_).transfer(to, amount);
+  }
 }

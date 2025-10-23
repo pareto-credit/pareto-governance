@@ -74,6 +74,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
 
     vm.startPrank(TL_MULTISIG);
     IBalancerVault(BALANCER_VAULT).pausePool(address(bpt));
+    votingEscrow.set_penalty_treasury(TL_MULTISIG);
     vm.stopPrank();
 
     rewardStartTime = block.timestamp + REWARD_START_DELAY;
@@ -168,6 +169,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(votingEscrow.rewardDistributor(), address(rewardDistributor), 'VotingEscrow reward distributor is wrong');
     assertEq(votingEscrow.balToken(), ILaunchpad(LAUNCHPAD).balToken(), 'VotingEscrow BAL token is wrong');
     assertEq(votingEscrow.balMinter(), ILaunchpad(LAUNCHPAD).balMinter(), 'VotingEscrow BAL minter is wrong');
+    assertEq(votingEscrow.penalty_treasury(), TL_MULTISIG, 'VotingEscrow penalty treasury is wrong');
 
     IRewardDistributorMinimal distributor = IRewardDistributorMinimal(rewardDistributor);
     uint256 expectedStart = rewardStartTime - (rewardStartTime % 1 weeks);
@@ -516,6 +518,20 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     rewardDistributor.claimToken(PROPOSER, address(par));
     parBalPost = par.balanceOf(PROPOSER);
     assertEq(parBalPost - parBalInitial, 100_000 * 1e18, "total PAR rewards not received after 2nd claim");
+  }
+
+  function testFork_RecoverERC20Orchestrator() external {
+    deal(address(USDC), address(orchestrator), 1_000 * 1e6);
+    vm.expectRevert("Deploy:only-deployer");
+    orchestrator.recoverERC20(address(USDC), DEPLOYER, 1_000 * 1e6);
+    
+    vm.startPrank(DEPLOYER, DEPLOYER);
+    uint256 balPre = IERC20(USDC).balanceOf(DEPLOYER);
+    orchestrator.recoverERC20(address(USDC), DEPLOYER, 1_000 * 1e6);
+    uint256 balPost = IERC20(USDC).balanceOf(DEPLOYER);
+    vm.stopPrank();
+
+    assertEq(balPost - balPre, 1_000 * 1e6, "orchestrator recoverERC20 failed");
   }
 
   function _doProposal() internal {
