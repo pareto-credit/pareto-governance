@@ -8,6 +8,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Pareto } from "../src/Pareto.sol";
 import { MerkleClaim } from "../src/MerkleClaim.sol";  
 import { GovernableFund } from "../src/GovernableFund.sol";
+import { ParetoVesting } from "../src/vesting/ParetoVesting.sol";
 import { VeVotesAdapter } from "../src/governance/VeVotesAdapter.sol";
 import { VotesAggregator } from "../src/governance/VotesAggregator.sol";
 import { ParetoGovernorHybrid } from "../src/governance/ParetoGovernorHybrid.sol";
@@ -47,6 +48,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   IBalancerVotingEscrow votingEscrow;
   IRewardDistributorMinimal rewardDistributor;
   IRewardFaucetMinimal rewardFaucet;
+  ParetoVesting investorVesting;
   IBalancerWeightedPool bpt;
   LensReward lens;
 
@@ -64,7 +66,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.startPrank(DEPLOYER, DEPLOYER);
     (
       par, merkle, longTermFund, teamFund,
-      votingEscrow, rewardDistributor, rewardFaucet, bpt, lens,
+      votingEscrow, rewardDistributor, rewardFaucet, investorVesting, bpt, lens,
       veVotesAdapter, votesAggregator, timelock, governor,
       orchestrator
     ) = _fullDeploy();
@@ -86,6 +88,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.label(address(bpt), "8020_BPT_Pool");
     vm.label(address(rewardDistributor), "RewardDistributor");
     vm.label(address(rewardFaucet), "RewardFaucet");
+    vm.label(address(investorVesting), "InvestorVesting");
     vm.label(address(merkle), "MerkleClaim");
     vm.label(address(longTermFund), "LongTermFund");
     vm.label(address(teamFund), "TeamFund");
@@ -106,10 +109,20 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(par.clock(), uint48(block.timestamp), 'clock is wrong');
     assertEq(par.CLOCK_MODE(), "mode=timestamp", 'CLOCK_MODE is wrong');
     assertEq(par.nonces(address(orchestrator)), 0, 'nonce is wrong');
+    assertEq(address(investorVesting.token()), address(par), "Investor vesting token is wrong");
+    assertEq(par.balanceOf(address(investorVesting)), INVESTOR_RESERVE, "Investor vesting balance is wrong");
+    assertEq(investorVesting.totalAllocated(), INVESTOR_RESERVE, "Investor vesting allocation is wrong");
+    assertEq(investorVesting.owner(), TL_MULTISIG, "Investor vesting owner is wrong");
+    assertEq(investorVesting.cliffDuration(), INVESTOR_VESTING_CLIFF, "Investor vesting cliff is wrong");
+    assertEq(investorVesting.vestingDuration(), INVESTOR_VESTING_DURATION, "Investor vesting duration is wrong");
 
     assertEq(longTermFund.owner(), address(timelock), 'owner is wrong');
     assertEq(teamFund.owner(), TL_MULTISIG, 'owner of team fund is wrong');
-    assertEq(par.balanceOf(address(longTermFund)), TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE, 'initial balance is wrong');
+    assertEq(
+      par.balanceOf(address(longTermFund)),
+      TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE - INVESTOR_RESERVE,
+      'initial balance is wrong'
+    );
     assertEq(par.balanceOf(TL_MULTISIG), TOT_RESERVED_OPS, 'TL_MULTISIG balance is wrong');
     assertEq(par.balanceOf(address(merkle)), TOT_DISTRIBUTION, 'merkle balance is wrong');
     assertEq(par.balanceOf(address(teamFund)), TEAM_RESERVE, 'teamFund balance is wrong');

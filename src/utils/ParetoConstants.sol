@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
+import {ParetoVesting} from "../vesting/ParetoVesting.sol";
 
 /// @title Shared deployment constants for Pareto governance and ve-system scripts
 abstract contract ParetoConstants {
@@ -10,6 +11,10 @@ abstract contract ParetoConstants {
   uint256 public constant TOT_DISTRIBUTION = 9_385_579 * ONE;
   uint256 public constant TOT_RESERVED_OPS = TOT_SUPPLY / 10;
   uint256 public constant TEAM_RESERVE = TOT_SUPPLY / 100 * 6;
+  uint256 public constant INVESTOR_RESERVE = TOT_SUPPLY / 10;
+  uint64 public constant INVESTOR_VESTING_DURATION = 730 days; // 2 years
+  uint64 public constant INVESTOR_VESTING_CLIFF = 180 days; // 6 months
+  uint8 internal constant INVESTOR_COUNT = 3;
   address public constant DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
   address public constant TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -37,4 +42,13 @@ abstract contract ParetoConstants {
   uint256 public constant PAR_WEIGHT_BPS = 0;
   uint256 public constant VE_WEIGHT_BPS = 10_000;
   uint256 public constant TIMELOCK_MIN_DELAY = 2 days;
+
+  /// @notice Returns the default investor allocations used during deployment
+  function _investorAllocations() internal pure returns (ParetoVesting.Allocation[] memory allocs){
+    allocs = new ParetoVesting.Allocation[](INVESTOR_COUNT);
+    // Placeholder addresses and allocations
+    allocs[0] = ParetoVesting.Allocation(0x1111111111111111111111111111111111111111, 910_000 * ONE);
+    allocs[1] = ParetoVesting.Allocation(0x2222222222222222222222222222222222222222, 546_000 * ONE);
+    allocs[2] = ParetoVesting.Allocation(0x3333333333333333333333333333333333333333, 364_000 * ONE);
+  }
 }

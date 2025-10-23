@@ -5,6 +5,7 @@ import {Pareto} from "../Pareto.sol";
 import {MerkleClaim} from "../MerkleClaim.sol";
 import {GovernableFund} from "../GovernableFund.sol";
 import {ParetoConstants} from "../utils/ParetoConstants.sol";
+import {ParetoVesting} from "../vesting/ParetoVesting.sol";
 
 import {IBalancerVotingEscrow} from "../staking/interfaces/IBalancerVotingEscrow.sol";
 import {IRewardDistributorMinimal} from "../staking/interfaces/IRewardDistributorMinimal.sol";
@@ -40,6 +41,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
   IBalancerVotingEscrow public votingEscrow;
   IRewardDistributorMinimal public rewardDistributor;
   IRewardFaucetMinimal public rewardFaucet;
+  ParetoVesting public investorVesting;
   IBalancerWeightedPool public bpt;
   LensReward public lens;
   VeVotesAdapter public veVotesAdapter;
@@ -66,14 +68,26 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     par = new Pareto{salt: parSalt}();
     longTermFund = new GovernableFund(address(this));
     teamFund = new GovernableFund(TL_MULTISIG);
+    investorVesting = new ParetoVesting(
+      address(par),
+      TL_MULTISIG,
+      _investorAllocations(),
+      INVESTOR_VESTING_CLIFF,
+      INVESTOR_VESTING_DURATION
+    );
+    require(investorVesting.totalAllocated() == INVESTOR_RESERVE, "Deploy:investor-allocation-mismatch");
     merkle = new MerkleClaim(MERKLE_ROOT, address(par));
 
     // funds reserved for prev IDLE holders, based on snapshot taken in Jan 2024
     par.transfer(address(merkle), TOT_DISTRIBUTION);
+    par.transfer(address(investorVesting), INVESTOR_RESERVE);
     // Ops reserved (First year emissions + early LP airdrop + DEX/CEX seed liquidity)
     par.transfer(TL_MULTISIG, TOT_RESERVED_OPS);
     par.transfer(address(teamFund), TEAM_RESERVE);
-    par.transfer(address(longTermFund), TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE);
+    par.transfer(
+      address(longTermFund),
+      TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE - INVESTOR_RESERVE
+    );
   }
 
   /// @dev Select a salt for the Pareto deployment that results in an address

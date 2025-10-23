@@ -10,6 +10,7 @@ import {MerkleClaim} from "../src/MerkleClaim.sol";
 import {GovernableFund} from "../src/GovernableFund.sol";
 import {ParetoConstants} from "../src/utils/ParetoConstants.sol";
 import {ParetoDeployOrchestrator} from "../src/deployment/ParetoDeployOrchestrator.sol";
+import {ParetoVesting} from "../src/vesting/ParetoVesting.sol";
 
 import {IBalancerVotingEscrow} from "../src/staking/interfaces/IBalancerVotingEscrow.sol";
 import {IRewardDistributorMinimal} from "../src/staking/interfaces/IRewardDistributorMinimal.sol";
@@ -49,6 +50,7 @@ contract DeployScript is Script, ParetoConstants {
     IBalancerVotingEscrow votingEscrow,
     IRewardDistributorMinimal rewardDistributor,
     IRewardFaucetMinimal rewardFaucet,
+    ParetoVesting investorVesting,
     IBalancerWeightedPool bpt,
     LensReward lens,
     VeVotesAdapter veVotesAdapter,
@@ -69,6 +71,7 @@ contract DeployScript is Script, ParetoConstants {
     votingEscrow = orchestrator.votingEscrow();
     rewardDistributor = orchestrator.rewardDistributor();
     rewardFaucet = orchestrator.rewardFaucet();
+    investorVesting = orchestrator.investorVesting();
     bpt = orchestrator.bpt();
     lens = orchestrator.lens();
     veVotesAdapter = orchestrator.veVotesAdapter();
@@ -80,6 +83,7 @@ contract DeployScript is Script, ParetoConstants {
     console.log("GovernableFund deployed at:", address(longTermFund));
     console.log("TeamFund deployed at:", address(teamFund));
     console.log("MerkleClaim deployed at:", address(merkle));
+    console.log("InvestorVesting deployed at:", address(investorVesting));
     console.log("8020 BPT deployed at:", address(bpt));
     console.log("VotingEscrow deployed at:", address(votingEscrow));
     console.log("RewardDistributor deployed at:", address(rewardDistributor));
@@ -90,13 +94,5 @@ contract DeployScript is Script, ParetoConstants {
     console.log("TimelockController deployed at:", address(timelock));
     console.log("ParetoGovernorHybrid deployed at:", address(governor));
     console2.log("Deployer BPT balance", IERC20(address(bpt)).balanceOf(DEPLOYER));
-
-    _postDeploy();
-  }
-
-  function _postDeploy() internal view {
-    console.log("### NOTE: pause trading of the balancer pool with TL_MULTISIG");
-    console.log("### NOTE: activate claims with TL_MULTISIG if needed with merkle.enableClaims()");
-    console.log("");
   }
 }
