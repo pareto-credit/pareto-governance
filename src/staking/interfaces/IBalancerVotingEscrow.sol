@@ -33,5 +33,9 @@ interface IBalancerVotingEscrow {
   function apply_transfer_ownership() external;
   function create_lock(uint256 amount, uint256 unlockTime) external;
   function penalty_treasury() external view returns (address);
+  function early_unlock() external view returns (bool);
   function set_penalty_treasury(address newTreasury) external;
+  function set_early_unlock(bool newValue) external;
+  function set_early_unlock_penalty_speed(uint256 newSpeed) external;
+  function withdraw_early() external;
 }

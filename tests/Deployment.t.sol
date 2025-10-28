@@ -72,13 +72,15 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     ) = _fullDeploy();
     vm.stopPrank();
 
+    rewardStartTime = block.timestamp + REWARD_START_DELAY;
+    skip(100);
+
     vm.startPrank(TL_MULTISIG);
     IBalancerVault(BALANCER_VAULT).pausePool(address(bpt));
     votingEscrow.set_penalty_treasury(TL_MULTISIG);
+    votingEscrow.set_early_unlock(true);
+    votingEscrow.set_early_unlock_penalty_speed(5);
     vm.stopPrank();
-
-    rewardStartTime = block.timestamp + REWARD_START_DELAY;
-    skip(100);
 
     vm.label(BAL_ROUTER, "BAL_ROUTER");
     vm.label(PERMIT2, "PERMIT2");
@@ -170,6 +172,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(votingEscrow.balToken(), ILaunchpad(LAUNCHPAD).balToken(), 'VotingEscrow BAL token is wrong');
     assertEq(votingEscrow.balMinter(), ILaunchpad(LAUNCHPAD).balMinter(), 'VotingEscrow BAL minter is wrong');
     assertEq(votingEscrow.penalty_treasury(), TL_MULTISIG, 'VotingEscrow penalty treasury is wrong');
+    assertEq(votingEscrow.early_unlock(), true, 'VotingEscrow early unlock is wrong');
 
     IRewardDistributorMinimal distributor = IRewardDistributorMinimal(rewardDistributor);
     uint256 expectedStart = rewardStartTime - (rewardStartTime % 1 weeks);
@@ -532,6 +535,22 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.stopPrank();
 
     assertEq(balPost - balPre, 1_000 * 1e6, "orchestrator recoverERC20 failed");
+  }
+
+  function testFork_EarlyUnlockMaxPenalty() external {
+    vm.startPrank(TL_MULTISIG);
+    IBalancerVault(BALANCER_VAULT).unpausePool(address(bpt));
+    vm.stopPrank();
+
+    uint256 bptBal = _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
+    skip(61); // give VotingEscrow time to adopt penalty_k = 5
+
+    vm.prank(PROPOSER);
+    votingEscrow.withdraw_early();
+
+    uint256 bptBalPost = IERC20(address(bpt)).balanceOf(PROPOSER);
+    // with max penalty half of the locked tokens are lost
+    assertApproxEqRel(bptBalPost, bptBal / 2, 2e16, "early unlock penalty incorrect");
   }
 
   function _doProposal() internal {
