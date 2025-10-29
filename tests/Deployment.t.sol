@@ -41,7 +41,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   uint256 internal constant PROPOSER_TOKENS = 500_000 * 1e18;
   uint256 internal constant VOTER_TOKENS = 1_000_000 * 1e18;
   IBalancerVault internal constant balancerVault = IBalancerVault(BALANCER_VAULT);
-
+  bytes32 internal constant GNOSIS_SAFE_V130_CODEHASH = 0xaea7d4252f6245f301e540cfbee27d3a88de543af8e49c5c62405d5499fab7e5;
   Pareto par;
   MerkleClaim merkle;
   GovernableFund longTermFund;
@@ -179,6 +179,8 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(votingEscrow.smart_wallet_checker(), address(smartWalletChecker), 'VotingEscrow smart wallet checker is wrong');
     assertEq(smartWalletChecker.owner(), TL_MULTISIG, 'SmartWalletChecker owner is wrong');
     assertEq(smartWalletChecker.allowAllSmartContracts(), false, 'SmartWalletChecker allow-all should default to false');
+    assertEq(smartWalletChecker.check(TL_MULTISIG), true, 'SmartWalletChecker check for TL_MULTISIG should be true');
+    assertEq(smartWalletChecker.allowedCodeHashes(GNOSIS_SAFE_V130_CODEHASH), true, 'Codehash for Gnosis safe v1.3.0 should be allowed');
 
     IRewardDistributorMinimal distributor = IRewardDistributorMinimal(rewardDistributor);
     uint256 expectedStart = rewardStartTime - (rewardStartTime % 1 weeks);

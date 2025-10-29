@@ -13,6 +13,9 @@ contract ParetoSmartWalletChecker is Ownable {
   /// @notice Flag allowing every smart contract when set to true
   bool public allowAllSmartContracts;
 
+  /// @notice Tracks runtime code hashes that are implicitly allowed (e.g. Gnosis Safe proxies)
+  mapping(bytes32 => bool) public allowedCodeHashes;
+
   /// @notice Emitted when the allow-all flag changes
   /// @param status New value applied to the allow-all flag
   event AllowAllSmartContractsUpdated(bool status);
@@ -22,8 +25,15 @@ contract ParetoSmartWalletChecker is Ownable {
   /// @param allowed Whether the wallet is now allowed
   event SmartWalletStatusUpdated(address indexed wallet, bool allowed);
 
+  /// @notice Emitted when a runtime code hash allowance is updated
+  /// @param codeHash Runtime code hash that was updated
+  /// @param allowed Whether the hash is now allowed
+  event CodeHashStatusUpdated(bytes32 indexed codeHash, bool allowed);
+
   /// @param initialOwner Address that will control whitelist updates (multisig recommended)
-  constructor(address initialOwner) Ownable(initialOwner) {}
+  constructor(address initialOwner) Ownable(initialOwner) {
+    allowedCodeHashes[initialOwner.codehash] = true;
+  }
 
   /// @notice Toggle the global allow-all flag
   /// @dev Callable only by the contract owner
@@ -55,10 +65,19 @@ contract ParetoSmartWalletChecker is Ownable {
     }
   }
 
+  /// @notice Update allowance status for a runtime code hash (e.g. Gnosis Safe proxy runtime)
+  /// @dev Callable only by the contract owner
+  /// @param codeHash Runtime code hash to update
+  /// @param allowed True to allow all contracts with this runtime hash, false to remove it
+  function setCodeHashStatus(bytes32 codeHash, bool allowed) external onlyOwner {
+    allowedCodeHashes[codeHash] = allowed;
+    emit CodeHashStatusUpdated(codeHash, allowed);
+  }
+
   /// @notice Implementation of the SmartWalletChecker interface used by VotingEscrow
   /// @param wallet Smart contract address attempting to interact with VotingEscrow
   /// @return True when the wallet is permitted to lock tokens
   function check(address wallet) external view returns (bool) {
-    return allowAllSmartContracts || smartWalletAllowed[wallet];
+    return allowAllSmartContracts || smartWalletAllowed[wallet] || allowedCodeHashes[wallet.codehash];
   }
 }
