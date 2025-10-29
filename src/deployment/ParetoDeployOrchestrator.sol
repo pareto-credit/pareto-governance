@@ -6,6 +6,7 @@ import {MerkleClaim} from "../MerkleClaim.sol";
 import {GovernableFund} from "../GovernableFund.sol";
 import {ParetoConstants} from "../utils/ParetoConstants.sol";
 import {ParetoVesting} from "../vesting/ParetoVesting.sol";
+import {ParetoSmartWalletChecker} from "../staking/ParetoSmartWalletChecker.sol";
 
 import {IBalancerVotingEscrow} from "../staking/interfaces/IBalancerVotingEscrow.sol";
 import {IRewardDistributorMinimal} from "../staking/interfaces/IRewardDistributorMinimal.sol";
@@ -48,6 +49,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
   VotesAggregator public votesAggregator;
   TimelockController public timelock;
   ParetoGovernorHybrid public governor;
+  ParetoSmartWalletChecker public smartWalletChecker;
 
   address public immutable deployer;
   bytes32 internal constant PARETO_CODE_HASH = keccak256(type(Pareto).creationCode);
@@ -79,6 +81,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     merkle = new MerkleClaim(MERKLE_ROOT, address(par));
 
     // funds reserved for prev IDLE holders, based on snapshot taken in Jan 2024
+    // + points season 1 and season 2 allocations + galxe campaign
     par.transfer(address(merkle), TOT_DISTRIBUTION);
     par.transfer(address(investorVesting), INVESTOR_RESERVE);
     // Ops reserved (First year emissions + early LP airdrop + DEX/CEX seed liquidity)
@@ -125,6 +128,10 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     votingEscrow = IBalancerVotingEscrow(ve);
     rewardDistributor = IRewardDistributorMinimal(distributor);
     rewardFaucet = IRewardFaucetMinimal(faucet);
+    smartWalletChecker = new ParetoSmartWalletChecker(TL_MULTISIG);
+
+    votingEscrow.commit_smart_wallet_checker(address(smartWalletChecker));
+    votingEscrow.apply_smart_wallet_checker();
 
     votingEscrow.commit_transfer_ownership(TL_MULTISIG);
     votingEscrow.apply_transfer_ownership();

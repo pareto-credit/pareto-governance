@@ -28,6 +28,7 @@ import { IGovernor } from "@openzeppelin/contracts/governance/IGovernor.sol";
 import { ParetoConstants } from "../src/utils/ParetoConstants.sol";
 import { console2 } from "forge-std/src/console2.sol";
 import { ParetoDeployOrchestrator } from "../src/deployment/ParetoDeployOrchestrator.sol";
+import { ParetoSmartWalletChecker } from "../src/staking/ParetoSmartWalletChecker.sol";
 
 contract TestDeployment is Test, ParetoConstants, DeployScript {
   bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
@@ -57,6 +58,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   ParetoGovernorHybrid governor;
   TimelockController timelock;
   ParetoDeployOrchestrator orchestrator;
+  ParetoSmartWalletChecker smartWalletChecker;
   uint256 internal rewardStartTime;
   bool internal proposalExecuted;
 
@@ -68,7 +70,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
       par, merkle, longTermFund, teamFund,
       votingEscrow, rewardDistributor, rewardFaucet, investorVesting, bpt, lens,
       veVotesAdapter, votesAggregator, timelock, governor,
-      orchestrator
+      orchestrator, smartWalletChecker
     ) = _fullDeploy();
     vm.stopPrank();
 
@@ -99,6 +101,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.label(address(votesAggregator), "VotesAggregator");
     vm.label(address(timelock), "Timelock");
     vm.label(address(governor), "Governor");
+    vm.label(address(smartWalletChecker), "SmartWalletChecker");
   }
 
   function testFork_Deploy() external {
@@ -173,6 +176,9 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(votingEscrow.balMinter(), ILaunchpad(LAUNCHPAD).balMinter(), 'VotingEscrow BAL minter is wrong');
     assertEq(votingEscrow.penalty_treasury(), TL_MULTISIG, 'VotingEscrow penalty treasury is wrong');
     assertEq(votingEscrow.early_unlock(), true, 'VotingEscrow early unlock is wrong');
+    assertEq(votingEscrow.smart_wallet_checker(), address(smartWalletChecker), 'VotingEscrow smart wallet checker is wrong');
+    assertEq(smartWalletChecker.owner(), TL_MULTISIG, 'SmartWalletChecker owner is wrong');
+    assertEq(smartWalletChecker.allowAllSmartContracts(), false, 'SmartWalletChecker allow-all should default to false');
 
     IRewardDistributorMinimal distributor = IRewardDistributorMinimal(rewardDistributor);
     uint256 expectedStart = rewardStartTime - (rewardStartTime % 1 weeks);

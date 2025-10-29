@@ -26,11 +26,14 @@ interface IBalancerVotingEscrow {
   function admin() external view returns (address);
   function admin_unlock_all() external view returns (address);
   function admin_early_unlock() external view returns (address);
+  function smart_wallet_checker() external view returns (address);
   function balToken() external view returns (address);
   function balMinter() external view returns (address);
   function rewardDistributor() external view returns (address);
   function commit_transfer_ownership(address newAdmin) external;
   function apply_transfer_ownership() external;
+  function commit_smart_wallet_checker(address newChecker) external;
+  function apply_smart_wallet_checker() external;
   function create_lock(uint256 amount, uint256 unlockTime) external;
   function penalty_treasury() external view returns (address);
   function early_unlock() external view returns (bool);

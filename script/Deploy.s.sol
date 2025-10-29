@@ -23,6 +23,7 @@ import {VeVotesAdapter} from "../src/governance/VeVotesAdapter.sol";
 import {VotesAggregator} from "../src/governance/VotesAggregator.sol";
 import {ParetoGovernorHybrid} from "../src/governance/ParetoGovernorHybrid.sol";
 import {LensReward} from "ve8020-launchpad/contracts/LensReward.sol";
+import {ParetoSmartWalletChecker} from "../src/staking/ParetoSmartWalletChecker.sol";
 
 contract DeployScript is Script, ParetoConstants {
   function run() public {
@@ -57,7 +58,8 @@ contract DeployScript is Script, ParetoConstants {
     VotesAggregator votesAggregator,
     TimelockController timelock,
     ParetoGovernorHybrid governor,
-    ParetoDeployOrchestrator orchestrator
+    ParetoDeployOrchestrator orchestrator,
+    ParetoSmartWalletChecker smartWalletChecker
   ) {
     require(PAR_WEIGHT_BPS + VE_WEIGHT_BPS > 0, "Deploy:invalid-weights");
     require(MERKLE_ROOT != bytes32(0), "Deploy:merkle-root-zero");
@@ -78,6 +80,7 @@ contract DeployScript is Script, ParetoConstants {
     votesAggregator = orchestrator.votesAggregator();
     timelock = orchestrator.timelock();
     governor = orchestrator.governor();
+    smartWalletChecker = orchestrator.smartWalletChecker();
 
     console.log("Pareto deployed at:", address(par));
     console.log("GovernableFund deployed at:", address(longTermFund));
@@ -93,6 +96,7 @@ contract DeployScript is Script, ParetoConstants {
     console.log("VotesAggregator deployed at:", address(votesAggregator));
     console.log("TimelockController deployed at:", address(timelock));
     console.log("ParetoGovernorHybrid deployed at:", address(governor));
+    console.log("SmartWalletChecker deployed at:", address(smartWalletChecker));
     console2.log("Deployer BPT balance", IERC20(address(bpt)).balanceOf(DEPLOYER));
   }
 }
