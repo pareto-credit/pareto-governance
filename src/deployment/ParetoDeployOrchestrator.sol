@@ -128,7 +128,10 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     votingEscrow = IBalancerVotingEscrow(ve);
     rewardDistributor = IRewardDistributorMinimal(distributor);
     rewardFaucet = IRewardFaucetMinimal(faucet);
-    smartWalletChecker = new ParetoSmartWalletChecker(TL_MULTISIG);
+
+    bytes32[] memory allowedCodeHashes = new bytes32[](1);
+    allowedCodeHashes[0] = TL_MULTISIG.codehash;
+    smartWalletChecker = new ParetoSmartWalletChecker(TL_MULTISIG, new address[](0), allowedCodeHashes);
 
     votingEscrow.commit_smart_wallet_checker(address(smartWalletChecker));
     votingEscrow.apply_smart_wallet_checker();
