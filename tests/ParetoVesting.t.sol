@@ -16,6 +16,7 @@ contract ParetoVestingTest is Test {
 
   uint64 internal constant CLIFF_DURATION = 90 days;
   uint64 internal constant VESTING_DURATION = 365 days;
+  uint256 internal constant INITIAL_UNLOCK_BPS = 0;
 
   uint256 internal constant ALLOCATION_A = 1_000 ether;
   uint256 internal constant ALLOCATION_B = 500 ether;
@@ -32,7 +33,8 @@ contract ParetoVestingTest is Test {
       OWNER,
       allocations,
       CLIFF_DURATION,
-      VESTING_DURATION
+      VESTING_DURATION,
+      INITIAL_UNLOCK_BPS
     );
 
     token.transfer(address(vesting), ALLOCATION_A + ALLOCATION_B);
@@ -46,7 +48,8 @@ contract ParetoVestingTest is Test {
       OWNER,
       allocations,
       CLIFF_DURATION,
-      VESTING_DURATION
+      VESTING_DURATION,
+      INITIAL_UNLOCK_BPS
     );
   }
 
@@ -60,7 +63,8 @@ contract ParetoVestingTest is Test {
       OWNER,
       allocations,
       CLIFF_DURATION,
-      0
+      0,
+      INITIAL_UNLOCK_BPS
     );
   }
 
@@ -74,7 +78,8 @@ contract ParetoVestingTest is Test {
       OWNER,
       allocations,
       VESTING_DURATION + 1,
-      VESTING_DURATION
+      VESTING_DURATION,
+      INITIAL_UNLOCK_BPS
     );
   }
 
@@ -88,7 +93,8 @@ contract ParetoVestingTest is Test {
       OWNER,
       allocations,
       CLIFF_DURATION,
-      VESTING_DURATION
+      VESTING_DURATION,
+      INITIAL_UNLOCK_BPS
     );
   }
 
@@ -102,7 +108,8 @@ contract ParetoVestingTest is Test {
       OWNER,
       allocations,
       CLIFF_DURATION,
-      VESTING_DURATION
+      VESTING_DURATION,
+      INITIAL_UNLOCK_BPS
     );
   }
 
@@ -117,7 +124,23 @@ contract ParetoVestingTest is Test {
       OWNER,
       allocations,
       CLIFF_DURATION,
-      VESTING_DURATION
+      VESTING_DURATION,
+      INITIAL_UNLOCK_BPS
+    );
+  }
+
+  function test_RevertWhen_InitialUnlockAbove100Percent() external {
+    ParetoVesting.Allocation[] memory allocations = new ParetoVesting.Allocation[](1);
+    allocations[0] = ParetoVesting.Allocation({beneficiary: INVESTOR_A, amount: ALLOCATION_A});
+
+    vm.expectRevert(ParetoVesting.VestingInitialUnlockTooHigh.selector);
+    new ParetoVesting(
+      address(token),
+      OWNER,
+      allocations,
+      0,
+      VESTING_DURATION,
+      10_001
     );
   }
 
@@ -250,5 +273,123 @@ contract ParetoVestingTest is Test {
     vm.prank(INVESTOR_A);
     uint256 claimed = vesting.claim();
     assertEq(claimed, ALLOCATION_A, "All tokens should vest under fuzz");
+  }
+
+  function test_ImmediateUnlockAvailableWhenConfigured() external {
+    ParetoVesting.Allocation[] memory allocations = new ParetoVesting.Allocation[](1);
+    allocations[0] = ParetoVesting.Allocation({beneficiary: INVESTOR_A, amount: ALLOCATION_A});
+
+    uint256 unlockBps = 1_000; // 10%
+
+    ParetoVesting instantVesting = new ParetoVesting(
+      address(token),
+      OWNER,
+      allocations,
+      0,
+      VESTING_DURATION,
+      unlockBps
+    );
+
+    token.transfer(address(instantVesting), ALLOCATION_A);
+
+    uint256 releasable = instantVesting.releasableAmount(INVESTOR_A);
+    uint256 expectedImmediate = ALLOCATION_A * unlockBps / 10_000;
+    assertEq(releasable, expectedImmediate, "Immediate unlock mismatch");
+
+    vm.prank(INVESTOR_A);
+    uint256 claimed = instantVesting.claim();
+    assertEq(claimed, expectedImmediate, "Immediate claim mismatch");
+  }
+
+  function test_ReleasableBeforeCliffIncludesInitialUnlock() external {
+    ParetoVesting.Allocation[] memory allocations = new ParetoVesting.Allocation[](1);
+    allocations[0] = ParetoVesting.Allocation({beneficiary: INVESTOR_A, amount: ALLOCATION_A});
+
+    uint256 unlockBps = 2_500; // 25%
+    uint64 customCliff = 60 days;
+
+    ParetoVesting vestingWithUnlock = new ParetoVesting(
+      address(token),
+      OWNER,
+      allocations,
+      customCliff,
+      VESTING_DURATION,
+      unlockBps
+    );
+
+    token.transfer(address(vestingWithUnlock), ALLOCATION_A);
+
+    uint256 expectedImmediate = ALLOCATION_A * unlockBps / 10_000;
+    assertEq(
+      vestingWithUnlock.releasableAmount(INVESTOR_A),
+      expectedImmediate,
+      "Initial unlock should be releasable before cliff"
+    );
+    assertEq(
+      vestingWithUnlock.vestedAmount(INVESTOR_A),
+      expectedImmediate,
+      "Vested amount should equal immediate unlock before cliff"
+    );
+
+    vm.prank(INVESTOR_A);
+    uint256 claimed = vestingWithUnlock.claim();
+    assertEq(claimed, expectedImmediate, "Claimed amount should match immediate unlock");
+    assertEq(
+      vestingWithUnlock.releasableAmount(INVESTOR_A),
+      0,
+      "No additional tokens should vest before cliff"
+    );
+  }
+
+  function test_InitialUnlockThenLinearAccrual() external {
+    ParetoVesting.Allocation[] memory allocations = new ParetoVesting.Allocation[](1);
+    allocations[0] = ParetoVesting.Allocation({beneficiary: INVESTOR_A, amount: ALLOCATION_A});
+
+    uint256 unlockBps = 1_500; // 15%
+
+    ParetoVesting vestingWithUnlock = new ParetoVesting(
+      address(token),
+      OWNER,
+      allocations,
+      CLIFF_DURATION,
+      VESTING_DURATION,
+      unlockBps
+    );
+
+    token.transfer(address(vestingWithUnlock), ALLOCATION_A);
+
+    uint256 immediate = ALLOCATION_A * unlockBps / 10_000;
+
+    vm.prank(INVESTOR_A);
+    uint256 firstClaim = vestingWithUnlock.claim();
+    assertEq(firstClaim, immediate, "Immediate claim mismatch");
+    // bal is 150 (out of 1000)
+
+    uint256 toCliff = vestingWithUnlock.cliffTimestamp() - block.timestamp;
+    skip(toCliff + 30 days); // we are now 120 days past cliff
+
+    uint256 vestedPostCliff = vestingWithUnlock.vestedAmount(INVESTOR_A);
+    assertEq(vestedPostCliff, immediate + (ALLOCATION_A - immediate) * (CLIFF_DURATION + 30 days) / VESTING_DURATION, "Vested post-cliff mismatch");
+    uint256 releasable = vestingWithUnlock.releasableAmount(INVESTOR_A);
+    assertGt(releasable, 0, "Linear vesting should accrue after cliff");
+    assertEq(
+      releasable,
+      vestedPostCliff - immediate,
+      "Releasable should track vested minus claimed immediate portion"
+    );
+
+    vm.prank(INVESTOR_A);
+    uint256 secondClaim = vestingWithUnlock.claim();
+    uint256 claimedSoFar = immediate + secondClaim;
+    assertEq(token.balanceOf(INVESTOR_A), claimedSoFar, "Beneficiary balance mismatch");
+    assertEq(token.balanceOf(INVESTOR_A), vestedPostCliff, "Second claim mismatch");
+
+    uint256 toEnd = vestingWithUnlock.endTimestamp() - block.timestamp;
+    skip(toEnd);
+
+    vm.prank(INVESTOR_A);
+    uint256 finalClaim = vestingWithUnlock.claim();
+    assertEq(claimedSoFar + finalClaim, ALLOCATION_A, "All tokens should vest by end");
+    assertEq(token.balanceOf(INVESTOR_A), ALLOCATION_A, "Final balance should equal allocation");
   }
 }

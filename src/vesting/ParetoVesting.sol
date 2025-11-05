@@ -63,6 +63,12 @@ contract ParetoVesting is Ownable, ReentrancyGuard {
   /// @notice Thrown when attempting to use the zero address where not allowed
   error VestingZeroAddress();
 
+  /// @notice Thrown when the configured initial unlock percentage exceeds 100%
+  error VestingInitialUnlockTooHigh();
+
+  /// @dev Basis point denominator used for percentage math
+  uint256 internal constant BPS_DENOMINATOR = 10_000;
+
   /// @notice Address of the token distributed via vesting
   IERC20 public immutable token;
 
@@ -87,6 +93,9 @@ contract ParetoVesting is Ownable, ReentrancyGuard {
   /// @notice Sum of tokens claimed so far
   uint256 public claimedTotal;
 
+  /// @notice Portion of each allocation that unlocks immediately (in basis points)
+  uint256 public immutable initialUnlockBps;
+
   mapping(address => Schedule) private _schedules;
 
   /// @param token_ address of the ERC20 being vested
@@ -94,17 +103,20 @@ contract ParetoVesting is Ownable, ReentrancyGuard {
   /// @param allocations allocation descriptors (beneficiary + amount)
   /// @param cliffDuration_ duration after start before vesting unlocks
   /// @param vestingDuration_ total vesting duration
+  /// @param initialUnlockBps_ basis points of each allocation unlocked at start
   constructor(
     address token_,
     address owner_,
     Allocation[] memory allocations,
     uint64 cliffDuration_,
-    uint64 vestingDuration_
+    uint64 vestingDuration_,
+    uint256 initialUnlockBps_
   ) Ownable(owner_) {
     if (allocations.length == 0) revert VestingNoBeneficiaries();
     if (vestingDuration_ == 0) revert VestingDurationZero();
     if (vestingDuration_ < cliffDuration_) revert VestingCliffTooLong();
     if (token_ == address(0)) revert VestingZeroToken();
+    if (initialUnlockBps_ > BPS_DENOMINATOR) revert VestingInitialUnlockTooHigh();
 
     token = IERC20(token_);
     startTimestamp = uint64(block.timestamp);
@@ -112,6 +124,7 @@ contract ParetoVesting is Ownable, ReentrancyGuard {
     vestingDuration = vestingDuration_;
     cliffTimestamp = startTimestamp + cliffDuration_;
     endTimestamp = startTimestamp + vestingDuration_;
+    initialUnlockBps = initialUnlockBps_;
 
     uint256 allocated;
     for (uint256 i = 0; i < allocations.length; ++i) {
@@ -210,8 +223,13 @@ contract ParetoVesting is Ownable, ReentrancyGuard {
   /// @dev Computes the vested amount based on elapsed time
   function _vestedAmount(uint256 allocation) internal view returns (uint256) {
     uint256 currentTime = block.timestamp;
-    if (currentTime <= startTimestamp || currentTime < cliffTimestamp) return 0;
+    uint256 initialUnlock = allocation * initialUnlockBps / BPS_DENOMINATOR;
+
+    if (currentTime <= startTimestamp || currentTime < cliffTimestamp) return initialUnlock;
     if (currentTime >= endTimestamp) return allocation;
-    return allocation * (currentTime - startTimestamp) / (endTimestamp - startTimestamp);
+
+    uint256 linearPortion = allocation - initialUnlock;
+    uint256 linearVested = linearPortion * (currentTime - startTimestamp) / (endTimestamp - startTimestamp);
+    return initialUnlock + linearVested;
   }
 }

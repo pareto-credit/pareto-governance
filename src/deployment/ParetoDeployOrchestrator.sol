@@ -76,14 +76,16 @@ contract ParetoDeployOrchestrator is ParetoConstants {
       TL_MULTISIG,
       _investorAllocations(),
       INVESTOR_VESTING_CLIFF,
-      INVESTOR_VESTING_DURATION
+      INVESTOR_VESTING_DURATION,
+      INVESTOR_INITIAL_UNLOCK_BPS
     );
     bigIdleVesting = new ParetoVesting(
       address(par),
       TL_MULTISIG,
       _bigIdleAllocations(),
       BIG_IDLE_VESTING_CLIFF,
-      BIG_IDLE_VESTING_DURATION
+      BIG_IDLE_VESTING_DURATION,
+      BIG_IDLE_INITIAL_UNLOCK_BPS
     );
     merkle = new MerkleClaim(MERKLE_ROOT, address(par));
 

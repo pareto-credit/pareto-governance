@@ -15,11 +15,13 @@ abstract contract ParetoConstants {
   uint256 public constant INVESTOR_RESERVE = TOT_SUPPLY / 10;
   uint64 public constant INVESTOR_VESTING_DURATION = 730 days; // 2 years
   uint64 public constant INVESTOR_VESTING_CLIFF = 6 * 30 days; // 6 months
+  uint16 public constant INVESTOR_INITIAL_UNLOCK_BPS = 0;
   uint8 internal constant INVESTOR_COUNT = 3;
   // Big Idle vesting parameters
   uint256 public constant BIG_IDLE_RESERVE = TOT_SUPPLY * 53 / 100; // ~53% of total supply
   uint64 public constant BIG_IDLE_VESTING_DURATION = 4 * 30 days; // 4 months
   uint64 public constant BIG_IDLE_VESTING_CLIFF = 0; // no cliff
+  uint16 public constant BIG_IDLE_INITIAL_UNLOCK_BPS = 1_000; // 10% unlock on day 0
   uint8 internal constant BIG_IDLE_COUNT = 1;
 
   address public constant DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
