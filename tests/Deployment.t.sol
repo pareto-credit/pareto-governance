@@ -50,6 +50,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   IRewardDistributorMinimal rewardDistributor;
   IRewardFaucetMinimal rewardFaucet;
   ParetoVesting investorVesting;
+  ParetoVesting bigIdleVesting;
   IBalancerWeightedPool bpt;
   LensReward lens;
 
@@ -68,8 +69,8 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.startPrank(DEPLOYER, DEPLOYER);
     (
       par, merkle, longTermFund, teamFund,
-      votingEscrow, rewardDistributor, rewardFaucet, investorVesting, bpt, lens,
-      veVotesAdapter, votesAggregator, timelock, governor,
+      votingEscrow, rewardDistributor, rewardFaucet, investorVesting, bigIdleVesting,
+      bpt, lens, veVotesAdapter, votesAggregator, timelock, governor,
       orchestrator, smartWalletChecker
     ) = _fullDeploy();
     vm.stopPrank();
@@ -94,6 +95,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     vm.label(address(rewardDistributor), "RewardDistributor");
     vm.label(address(rewardFaucet), "RewardFaucet");
     vm.label(address(investorVesting), "InvestorVesting");
+    vm.label(address(bigIdleVesting), "BigIdleVesting");
     vm.label(address(merkle), "MerkleClaim");
     vm.label(address(longTermFund), "LongTermFund");
     vm.label(address(teamFund), "TeamFund");
@@ -115,6 +117,7 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(par.clock(), uint48(block.timestamp), 'clock is wrong');
     assertEq(par.CLOCK_MODE(), "mode=timestamp", 'CLOCK_MODE is wrong');
     assertEq(par.nonces(address(orchestrator)), 0, 'nonce is wrong');
+
     assertEq(address(investorVesting.token()), address(par), "Investor vesting token is wrong");
     assertEq(par.balanceOf(address(investorVesting)), INVESTOR_RESERVE, "Investor vesting balance is wrong");
     assertEq(investorVesting.totalAllocated(), INVESTOR_RESERVE, "Investor vesting allocation is wrong");
@@ -122,11 +125,19 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     assertEq(investorVesting.cliffDuration(), INVESTOR_VESTING_CLIFF, "Investor vesting cliff is wrong");
     assertEq(investorVesting.vestingDuration(), INVESTOR_VESTING_DURATION, "Investor vesting duration is wrong");
 
+    assertEq(address(bigIdleVesting.token()), address(par), "Big Idle vesting token is wrong");
+    assertEq(par.balanceOf(address(bigIdleVesting)), BIG_IDLE_RESERVE, "Big Idle vesting balance is wrong");
+    assertEq(bigIdleVesting.totalAllocated(), BIG_IDLE_RESERVE, "Big Idle vesting allocation is wrong");
+    assertEq(bigIdleVesting.owner(), TL_MULTISIG, "Big Idle vesting owner is wrong");
+    assertEq(bigIdleVesting.cliffDuration(), BIG_IDLE_VESTING_CLIFF, "Big Idle vesting cliff is wrong");
+    assertEq(bigIdleVesting.vestingDuration(), BIG_IDLE_VESTING_DURATION, "Big Idle vesting duration is wrong");
+
     assertEq(longTermFund.owner(), address(timelock), 'owner is wrong');
     assertEq(teamFund.owner(), TL_MULTISIG, 'owner of team fund is wrong');
+    console2.log('par.balanceOf(address(longTermFund))', par.balanceOf(address(longTermFund)));
     assertEq(
       par.balanceOf(address(longTermFund)),
-      TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE - INVESTOR_RESERVE,
+      TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE - INVESTOR_RESERVE - BIG_IDLE_RESERVE,
       'initial balance is wrong'
     );
     assertEq(par.balanceOf(TL_MULTISIG), TOT_RESERVED_OPS, 'TL_MULTISIG balance is wrong');
@@ -334,10 +345,10 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     IBalancerVault(BALANCER_VAULT).unpausePool(address(bpt));
     vm.stopPrank();
 
-    uint256 proposerBpt = _fund8020Votes(PROPOSER, PROPOSER_TOKENS);
-    uint256 voterBpt = _fund8020Votes(VOTER, VOTER_TOKENS);
-    _fundAndDelegate(PROPOSER, PROPOSER_TOKENS);
-    _fundAndDelegate(VOTER, VOTER_TOKENS);
+    uint256 proposerBpt = _fund8020Votes(PROPOSER, PROPOSER_TOKENS / 2);
+    uint256 voterBpt = _fund8020Votes(VOTER, VOTER_TOKENS / 2);
+    _fundAndDelegate(PROPOSER, PROPOSER_TOKENS / 2);
+    _fundAndDelegate(VOTER, VOTER_TOKENS / 2);
 
     // The ratio PAR:BPT is about 5.7:1 and we want that 1 BPT = 1 PAR for voting purposes
     // so we set the weights accordingly
@@ -607,8 +618,8 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   /// @dev amount is PAR amount to add as liquidity
   function _fund8020Votes(address account, uint256 amount) internal returns (uint256 bptBal) {
     // give PAR to the account
-    vm.prank(address(timelock));
-    longTermFund.transfer(address(par), account, amount);
+    vm.prank(TL_MULTISIG);
+    par.transfer(account, amount);
 
     // deal WETH to the account
     deal(WETH, account, TOT_SUPPLY);
@@ -659,8 +670,8 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function _fundAndDelegate(address account, uint256 amount) internal {
-    vm.prank(address(timelock));
-    longTermFund.transfer(address(par), account, amount);
+    vm.prank(TL_MULTISIG);
+    par.transfer(account, amount);
 
     vm.prank(account);
     par.delegate(account);

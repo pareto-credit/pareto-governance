@@ -43,6 +43,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
   IRewardDistributorMinimal public rewardDistributor;
   IRewardFaucetMinimal public rewardFaucet;
   ParetoVesting public investorVesting;
+  ParetoVesting public bigIdleVesting;
   IBalancerWeightedPool public bpt;
   LensReward public lens;
   VeVotesAdapter public veVotesAdapter;
@@ -77,19 +78,26 @@ contract ParetoDeployOrchestrator is ParetoConstants {
       INVESTOR_VESTING_CLIFF,
       INVESTOR_VESTING_DURATION
     );
-    require(investorVesting.totalAllocated() == INVESTOR_RESERVE, "Deploy:investor-allocation-mismatch");
+    bigIdleVesting = new ParetoVesting(
+      address(par),
+      TL_MULTISIG,
+      _bigIdleAllocations(),
+      BIG_IDLE_VESTING_CLIFF,
+      BIG_IDLE_VESTING_DURATION
+    );
     merkle = new MerkleClaim(MERKLE_ROOT, address(par));
 
     // funds reserved for prev IDLE holders, based on snapshot taken in Jan 2024
     // + points season 1 and season 2 allocations + galxe campaign
     par.transfer(address(merkle), TOT_DISTRIBUTION);
     par.transfer(address(investorVesting), INVESTOR_RESERVE);
+    par.transfer(address(bigIdleVesting), BIG_IDLE_RESERVE);
     // Ops reserved (First year emissions + early LP airdrop + DEX/CEX seed liquidity)
     par.transfer(TL_MULTISIG, TOT_RESERVED_OPS);
     par.transfer(address(teamFund), TEAM_RESERVE);
     par.transfer(
       address(longTermFund),
-      TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE - INVESTOR_RESERVE
+      TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE - INVESTOR_RESERVE - BIG_IDLE_RESERVE
     );
   }
 

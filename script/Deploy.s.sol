@@ -52,6 +52,7 @@ contract DeployScript is Script, ParetoConstants {
     IRewardDistributorMinimal rewardDistributor,
     IRewardFaucetMinimal rewardFaucet,
     ParetoVesting investorVesting,
+    ParetoVesting bigIdleVesting,
     IBalancerWeightedPool bpt,
     LensReward lens,
     VeVotesAdapter veVotesAdapter,
@@ -74,6 +75,7 @@ contract DeployScript is Script, ParetoConstants {
     rewardDistributor = orchestrator.rewardDistributor();
     rewardFaucet = orchestrator.rewardFaucet();
     investorVesting = orchestrator.investorVesting();
+    bigIdleVesting = orchestrator.bigIdleVesting();
     bpt = orchestrator.bpt();
     lens = orchestrator.lens();
     veVotesAdapter = orchestrator.veVotesAdapter();
@@ -87,6 +89,7 @@ contract DeployScript is Script, ParetoConstants {
     console.log("TeamFund deployed at:", address(teamFund));
     console.log("MerkleClaim deployed at:", address(merkle));
     console.log("InvestorVesting deployed at:", address(investorVesting));
+    console.log("BigIdleVesting deployed at:", address(bigIdleVesting));
     console.log("8020 BPT deployed at:", address(bpt));
     console.log("VotingEscrow deployed at:", address(votingEscrow));
     console.log("RewardDistributor deployed at:", address(rewardDistributor));

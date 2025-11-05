@@ -8,13 +8,20 @@ abstract contract ParetoConstants {
   uint256 internal constant ONE = 1e18;
   uint256 public constant TOT_SUPPLY = 18_200_000 * ONE;
   bytes32 public constant MERKLE_ROOT = 0x6edd0eecc77bf89794e0bb315c26a5ef4d308ea41ef05ae7fbe85d4fda84e83a;
-  uint256 public constant TOT_DISTRIBUTION = 9_385_579 * ONE;
+  uint256 public constant TOT_DISTRIBUTION = 3_244_604 * ONE;
   uint256 public constant TOT_RESERVED_OPS = TOT_SUPPLY / 10;
-  uint256 public constant TEAM_RESERVE = TOT_SUPPLY / 100 * 6;
+  uint256 public constant TEAM_RESERVE = TOT_SUPPLY * 6 / 100; // 6% of total supply
+  // Investor vesting parameters
   uint256 public constant INVESTOR_RESERVE = TOT_SUPPLY / 10;
   uint64 public constant INVESTOR_VESTING_DURATION = 730 days; // 2 years
-  uint64 public constant INVESTOR_VESTING_CLIFF = 180 days; // 6 months
+  uint64 public constant INVESTOR_VESTING_CLIFF = 6 * 30 days; // 6 months
   uint8 internal constant INVESTOR_COUNT = 3;
+  // Big Idle vesting parameters
+  uint256 public constant BIG_IDLE_RESERVE = TOT_SUPPLY * 53 / 100; // ~53% of total supply
+  uint64 public constant BIG_IDLE_VESTING_DURATION = 4 * 30 days; // 4 months
+  uint64 public constant BIG_IDLE_VESTING_CLIFF = 0; // no cliff
+  uint8 internal constant BIG_IDLE_COUNT = 1;
+
   address public constant DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
   address public constant TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -50,5 +57,13 @@ abstract contract ParetoConstants {
     allocs[0] = ParetoVesting.Allocation(0x1111111111111111111111111111111111111111, 910_000 * ONE);
     allocs[1] = ParetoVesting.Allocation(0x2222222222222222222222222222222222222222, 546_000 * ONE);
     allocs[2] = ParetoVesting.Allocation(0x3333333333333333333333333333333333333333, 364_000 * ONE);
+  }
+
+  /// @notice Returns the default big idle allocations used during deployment
+  function _bigIdleAllocations() internal pure returns (ParetoVesting.Allocation[] memory allocs){
+    allocs = new ParetoVesting.Allocation[](BIG_IDLE_COUNT);
+    // Placeholder addresses and allocations
+    allocs[0] = ParetoVesting.Allocation(0x4444444444444444444444444444444444444444, BIG_IDLE_RESERVE);
+    return allocs;
   }
 }
