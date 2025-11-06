@@ -107,8 +107,9 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function testFork_Deploy() external {
+    ParetoVesting.Allocation[] memory emptyAllocations = new ParetoVesting.Allocation[](0);
     vm.expectRevert("Deploy:wrong-eth-amount");
-    new ParetoDeployOrchestrator{value: 1}();
+    new ParetoDeployOrchestrator{value: 1}(emptyAllocations, emptyAllocations);
 
     assertEq(par.name(), "Pareto", 'name is wrong');
     assertEq(par.symbol(), "PAR", 'symbol is wrong');

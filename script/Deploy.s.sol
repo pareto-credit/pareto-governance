@@ -26,6 +26,17 @@ import {LensReward} from "ve8020-launchpad/contracts/LensReward.sol";
 import {ParetoSmartWalletChecker} from "../src/staking/ParetoSmartWalletChecker.sol";
 
 contract DeployScript is Script, ParetoConstants {
+  string internal constant INVESTOR_ALLOCATIONS_PATH = "distribution/investors.json";
+  string internal constant BIG_IDLE_ALLOCATIONS_PATH = "distribution/big_idle.json";
+
+  struct RawAllocations {
+    uint256 amount;
+    address beneficiary;
+  }
+
+  error DeployScriptJsonMissingAllocations(string path);
+  error DeployScriptAllocationTotalMismatch(string path, uint256 expected, uint256 actual);
+
   function run() public {
     // forge script ./script/Deploy.s.sol \
     // --fork-url $ETH_RPC_URL \
@@ -65,7 +76,16 @@ contract DeployScript is Script, ParetoConstants {
     require(PAR_WEIGHT_BPS + VE_WEIGHT_BPS > 0, "Deploy:invalid-weights");
     require(MERKLE_ROOT != bytes32(0), "Deploy:merkle-root-zero");
 
-    orchestrator = new ParetoDeployOrchestrator{value: WETH_SEED_AMOUNT}();
+    ParetoVesting.Allocation[] memory investorAllocations = _loadAllocations(
+      INVESTOR_ALLOCATIONS_PATH,
+      INVESTOR_RESERVE
+    );
+    ParetoVesting.Allocation[] memory bigIdleAllocations = _loadAllocations(
+      BIG_IDLE_ALLOCATIONS_PATH,
+      BIG_IDLE_RESERVE
+    );
+
+    orchestrator = new ParetoDeployOrchestrator{value: WETH_SEED_AMOUNT}(investorAllocations, bigIdleAllocations);
 
     par = orchestrator.par();
     merkle = orchestrator.merkle();
@@ -101,5 +121,30 @@ contract DeployScript is Script, ParetoConstants {
     console.log("ParetoGovernorHybrid deployed at:", address(governor));
     console.log("SmartWalletChecker deployed at:", address(smartWalletChecker));
     console2.log("Deployer BPT balance", IERC20(address(bpt)).balanceOf(DEPLOYER));
+  }
+
+  function _loadAllocations(string memory path, uint256 expectedTotal)
+    internal
+    view
+    returns (ParetoVesting.Allocation[] memory allocations)
+  {
+    string memory contents = vm.readFile(path);
+    bytes memory rawAllocationsData = vm.parseJson(contents, ".allocations");
+    RawAllocations[] memory decoded = abi.decode(rawAllocationsData, (RawAllocations[]));
+    uint256 length = decoded.length;
+    if (length == 0) revert DeployScriptJsonMissingAllocations(path);
+
+    allocations = new ParetoVesting.Allocation[](length);
+    uint256 total;
+    for (uint256 i = 0; i < length; ++i) {
+      allocations[i] = ParetoVesting.Allocation({
+        beneficiary: decoded[i].beneficiary,
+        amount: decoded[i].amount
+      });
+      total += decoded[i].amount;
+    }
+    if (total != expectedTotal) {
+      revert DeployScriptAllocationTotalMismatch(path, expectedTotal, total);
+    }
   }
 }

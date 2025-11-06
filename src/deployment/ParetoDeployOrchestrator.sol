@@ -55,18 +55,26 @@ contract ParetoDeployOrchestrator is ParetoConstants {
   address public immutable deployer;
   bytes32 internal constant PARETO_CODE_HASH = keccak256(type(Pareto).creationCode);
 
-  constructor() payable {
+  error DeployNoSalt();
+
+  constructor(
+    ParetoVesting.Allocation[] memory investorAllocations,
+    ParetoVesting.Allocation[] memory bigIdleAllocations
+  ) payable {
     address sender = tx.origin; // broadcast EOAs via script
     require(msg.value == WETH_SEED_AMOUNT, "Deploy:wrong-eth-amount");
 
     deployer = sender;
 
-    _deployCore();
+    _deployCore(investorAllocations, bigIdleAllocations);
     _deployVeSystem();
     _deployGovernance();
   }
 
-  function _deployCore() internal {
+  function _deployCore(
+    ParetoVesting.Allocation[] memory investorAllocations,
+    ParetoVesting.Allocation[] memory bigIdleAllocations
+  ) internal {
     bytes32 parSalt = _selectParSalt();
     par = new Pareto{salt: parSalt}();
     longTermFund = new GovernableFund(address(this));
@@ -74,7 +82,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     investorVesting = new ParetoVesting(
       address(par),
       TL_MULTISIG,
-      _investorAllocations(),
+      investorAllocations,
       INVESTOR_VESTING_CLIFF,
       INVESTOR_VESTING_DURATION,
       INVESTOR_INITIAL_UNLOCK_BPS
@@ -82,7 +90,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     bigIdleVesting = new ParetoVesting(
       address(par),
       TL_MULTISIG,
-      _bigIdleAllocations(),
+      bigIdleAllocations,
       BIG_IDLE_VESTING_CLIFF,
       BIG_IDLE_VESTING_DURATION,
       BIG_IDLE_INITIAL_UNLOCK_BPS
@@ -111,7 +119,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
         return bytes32(attempt);
       }
     }
-    revert("Deploy:no-salt");
+    revert DeployNoSalt();
   }
 
   function _computeCreate2(address deployerAddress, bytes32 salt, bytes32 initCodeHash) internal pure returns (address){
