@@ -3,35 +3,40 @@ pragma solidity 0.8.28;
 
 /// @title Shared deployment constants for Pareto governance and ve-system scripts
 abstract contract ParetoConstants {
-  // Core deployment parameters
+  // Generic constants
   uint256 internal constant ONE = 1e18;
-  uint256 public constant TOT_SUPPLY = 18_200_000 * ONE;
-  bytes32 public constant MERKLE_ROOT = 0x6edd0eecc77bf89794e0bb315c26a5ef4d308ea41ef05ae7fbe85d4fda84e83a;
-  uint256 public constant TOT_DISTRIBUTION = 3_244_604 * ONE;
-  uint256 public constant TOT_RESERVED_OPS = TOT_SUPPLY / 10;
-  uint256 public constant TEAM_RESERVE = TOT_SUPPLY * 6 / 100; // 6% of total supply
-  // Investor vesting parameters
-  uint256 public constant INVESTOR_RESERVE = TOT_SUPPLY / 10;
-  uint64 public constant INVESTOR_VESTING_DURATION = 730 days; // 2 years
-  uint64 public constant INVESTOR_VESTING_CLIFF = 6 * 30 days; // 6 months
-  uint16 public constant INVESTOR_INITIAL_UNLOCK_BPS = 0;
-  // Big Idle vesting parameters
-  uint256 public constant BIG_IDLE_RESERVE = TOT_SUPPLY * 53 / 100; // ~53% of total supply
-  uint64 public constant BIG_IDLE_VESTING_DURATION = 4 * 30 days; // 4 months
-  uint64 public constant BIG_IDLE_VESTING_CLIFF = 0; // no cliff
-  uint16 public constant BIG_IDLE_INITIAL_UNLOCK_BPS = 1_000; // 10% unlock on day 0
-
   address public constant DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
   address public constant TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-
-  // Ve-system deployment parameters
   address public constant LAUNCHPAD = 0x41b5b45f849a39CF7ac4aceAe6C78A72e3852133;
   address public constant BALANCER_FACTORY = 0x201efd508c8DfE9DE1a13c2452863A78CB2a86Cc;
   address payable public constant BALANCER_VAULT = payable(0xbA1333333333a1BA1108E8412f11850A5C319bA9);
   address internal constant BAL_ROUTER = 0x5C6fb490BDFD3246EB0bB062c168DeCAF4bD9FDd;
   address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
   address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+
+  // Core deployment parameters
+  uint256 public constant TOT_SUPPLY = 18_200_000 * ONE;
+  uint256 public constant TOT_RESERVED_OPS = TOT_SUPPLY / 10; // 10% of total supply
+  uint256 public constant TEAM_RESERVE = TOT_SUPPLY * 6 / 100; // 6% of total supply
+
+  // Merkle airdrop parameters
+  bytes32 public constant MERKLE_ROOT = 0x6edd0eecc77bf89794e0bb315c26a5ef4d308ea41ef05ae7fbe85d4fda84e83a;
+  uint256 public constant TOT_DISTRIBUTION = 3_244_604 * ONE;
+
+  // Investor vesting parameters
+  uint256 public constant INVESTOR_RESERVE = TOT_SUPPLY / 10;
+  uint64 public constant INVESTOR_VESTING_DURATION = 3 * 365 days; // 3 years
+  uint64 public constant INVESTOR_VESTING_CLIFF = 12 * 30 days; // 12 months
+  uint16 public constant INVESTOR_INITIAL_UNLOCK_BPS = 0;
+
+  // Big Idle vesting parameters
+  uint256 public constant BIG_IDLE_RESERVE = TOT_SUPPLY * 53 / 100; // ~53% of total supply
+  uint64 public constant BIG_IDLE_VESTING_DURATION = 4 * 30 days; // 4 months
+  uint64 public constant BIG_IDLE_VESTING_CLIFF = 0; // no cliff
+  uint16 public constant BIG_IDLE_INITIAL_UNLOCK_BPS = 1_000; // 10% unlock on day 0
+
+  // Ve-system deployment parameters
   uint256 public constant MAX_LOCK_TIME = 365 days;
   uint256 public constant REWARD_START_DELAY = 1 weeks;
   address public constant ADMIN_UNLOCK_ALL = TL_MULTISIG;
@@ -46,6 +51,6 @@ abstract contract ParetoConstants {
 
   // Hybrid governance deployment parameters
   uint256 public constant PAR_WEIGHT_BPS = 0;
-  uint256 public constant VE_WEIGHT_BPS = 10_000;
+  uint256 public constant VE_WEIGHT_BPS = 10_000; // voting allowed only via vePAR
   uint256 public constant TIMELOCK_MIN_DELAY = 2 days;
 }

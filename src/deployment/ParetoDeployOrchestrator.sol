@@ -61,10 +61,8 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     ParetoVesting.Allocation[] memory investorAllocations,
     ParetoVesting.Allocation[] memory bigIdleAllocations
   ) payable {
-    address sender = tx.origin; // broadcast EOAs via script
     require(msg.value == WETH_SEED_AMOUNT, "Deploy:wrong-eth-amount");
-
-    deployer = sender;
+    deployer = tx.origin; // broadcast EOAs via script
 
     _deployCore(investorAllocations, bigIdleAllocations);
     _deployVeSystem();
@@ -72,43 +70,36 @@ contract ParetoDeployOrchestrator is ParetoConstants {
   }
 
   function _deployCore(
-    ParetoVesting.Allocation[] memory investorAllocations,
-    ParetoVesting.Allocation[] memory bigIdleAllocations
+    ParetoVesting.Allocation[] memory investors, ParetoVesting.Allocation[] memory bigIdle
   ) internal {
-    bytes32 parSalt = _selectParSalt();
-    par = new Pareto{salt: parSalt}();
+    par = new Pareto{salt: _selectParSalt()}();
     longTermFund = new GovernableFund(address(this));
     teamFund = new GovernableFund(TL_MULTISIG);
-    investorVesting = new ParetoVesting(
-      address(par),
-      TL_MULTISIG,
-      investorAllocations,
-      INVESTOR_VESTING_CLIFF,
-      INVESTOR_VESTING_DURATION,
-      INVESTOR_INITIAL_UNLOCK_BPS
-    );
-    bigIdleVesting = new ParetoVesting(
-      address(par),
-      TL_MULTISIG,
-      bigIdleAllocations,
-      BIG_IDLE_VESTING_CLIFF,
-      BIG_IDLE_VESTING_DURATION,
-      BIG_IDLE_INITIAL_UNLOCK_BPS
-    );
-    merkle = new MerkleClaim(MERKLE_ROOT, address(par));
 
-    // funds reserved for prev IDLE holders, based on snapshot taken in Jan 2024
-    // + points season 1 and season 2 allocations + galxe campaign
-    par.transfer(address(merkle), TOT_DISTRIBUTION);
+    // Investors vesting
+    investorVesting = new ParetoVesting(
+      address(par), TL_MULTISIG, investors,
+      INVESTOR_VESTING_CLIFF, INVESTOR_VESTING_DURATION, INVESTOR_INITIAL_UNLOCK_BPS
+    );
     par.transfer(address(investorVesting), INVESTOR_RESERVE);
+
+    // Big Idle holders vesting
+    bigIdleVesting = new ParetoVesting(
+      address(par), TL_MULTISIG, bigIdle,
+      BIG_IDLE_VESTING_CLIFF, BIG_IDLE_VESTING_DURATION, BIG_IDLE_INITIAL_UNLOCK_BPS
+    );
     par.transfer(address(bigIdleVesting), BIG_IDLE_RESERVE);
+
+    // Prev Idle holders + S1 + S2 + galxe airdrop vesting via merkle claim
+    merkle = new MerkleClaim(MERKLE_ROOT, address(par));
+    par.transfer(address(merkle), TOT_DISTRIBUTION);
+
     // Ops reserved (First year emissions + early LP airdrop + DEX/CEX seed liquidity)
     par.transfer(TL_MULTISIG, TOT_RESERVED_OPS);
+    // Team reserve
     par.transfer(address(teamFund), TEAM_RESERVE);
-    par.transfer(
-      address(longTermFund),
-      TOT_SUPPLY - TOT_DISTRIBUTION - PAR_SEED_AMOUNT - TOT_RESERVED_OPS - TEAM_RESERVE - INVESTOR_RESERVE - BIG_IDLE_RESERVE
-    );
+    // Long Term Funds is the residual (minus a small amount to seed Balancer liquidity)
+    par.transfer(address(longTermFund), par.balanceOf(address(this)) - PAR_SEED_AMOUNT);
   }
 
   /// @dev Select a salt for the Pareto deployment that results in an address
@@ -123,11 +114,7 @@ contract ParetoDeployOrchestrator is ParetoConstants {
   }
 
   function _computeCreate2(address deployerAddress, bytes32 salt, bytes32 initCodeHash) internal pure returns (address){
-    return address(
-      uint160(
-        uint256(keccak256(abi.encodePacked(bytes1(0xff), deployerAddress, salt, initCodeHash)))
-      )
-    );
+    return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployerAddress, salt, initCodeHash)))));
   }
 
   function _deployVeSystem() internal {
@@ -169,42 +156,26 @@ contract ParetoDeployOrchestrator is ParetoConstants {
 
   function _deploy8020Pool() internal returns (IBalancerWeightedPool pool) {
     TokenConfig[] memory tokens = new TokenConfig[](2);
-    tokens[0] = TokenConfig({
-      token: IERC20(WETH),
-      tokenType: TokenType.STANDARD,
-      rateProvider: IRateProvider(address(0)),
-      paysYieldFees: false
-    });
-    tokens[1] = TokenConfig({
-      token: IERC20(address(par)),
-      tokenType: TokenType.STANDARD,
-      rateProvider: IRateProvider(address(0)),
-      paysYieldFees: false
-    });
+    // TokenConfig(token, tokenType, rateProvider, paysYieldFees)
+    tokens[0] = TokenConfig(IERC20(WETH), TokenType.STANDARD, IRateProvider(address(0)), false);
+    tokens[1] = TokenConfig(IERC20(address(par)), TokenType.STANDARD, IRateProvider(address(0)), false);
 
     uint256[] memory weights = new uint256[](2);
     weights[0] = ONE * 20 / 100;
     weights[1] = ONE * 80 / 100;
 
-    PoolRoleAccounts memory roleAccounts = PoolRoleAccounts({
-      pauseManager: TL_MULTISIG,
-      swapFeeManager: TL_MULTISIG,
-      poolCreator: address(0)
-    });
-
-    bytes32 salt = keccak256(abi.encodePacked(address(par), WETH));
     pool = IBalancerWeightedPool(
       IBalancerFactory(BALANCER_FACTORY).create(
         "Pareto 80PAR-20WETH Weighted Pool",
         "80PAR-20WETH",
         tokens,
         weights,
-        roleAccounts,
+        PoolRoleAccounts(TL_MULTISIG, TL_MULTISIG, address(0)), // pauseManager, swapFeeManager, poolCreator
         0.05e16, // swapFeePercentage = 0.05%
         address(0), // no hooks
         false, // no donations allowed
         false, // do not disable unbalanced joins
-        salt
+        keccak256(abi.encodePacked(address(par), WETH)) // salt
       )
     );
 
@@ -221,10 +192,9 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     poolAmounts[0] = WETH_SEED_AMOUNT;
     poolAmounts[1] = PAR_SEED_AMOUNT;
 
+    // Initialize pool and transfer BPT balance to the deployer
     IBalancerRouter(BAL_ROUTER).initialize(address(pool), poolTokens, poolAmounts, 0, false, "");
-
-    uint256 bptBalance = IERC20(address(pool)).balanceOf(address(this));
-    IERC20(address(pool)).transfer(deployer, bptBalance);
+    IERC20(address(pool)).transfer(deployer, IERC20(address(pool)).balanceOf(address(this)));
   }
 
   function _deployGovernance() internal {
@@ -252,8 +222,8 @@ contract ParetoDeployOrchestrator is ParetoConstants {
     longTermFund.transferOwnership(address(timelock));
   }
 
-  function recoverERC20(address token_, address to, uint256 amount) external {
-    require(msg.sender == deployer, "Deploy:only-deployer");
-    IERC20(token_).transfer(to, amount);
+  function recoverERC20(address _token, address to, uint256 amount) external {
+    require(msg.sender == deployer || msg.sender == TL_MULTISIG, "Deploy:not-allowed");
+    IERC20(_token).transfer(to, amount);
   }
 }

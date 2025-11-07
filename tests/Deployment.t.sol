@@ -544,8 +544,8 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
   }
 
   function testFork_RecoverERC20Orchestrator() external {
-    deal(address(USDC), address(orchestrator), 1_000 * 1e6);
-    vm.expectRevert("Deploy:only-deployer");
+    deal(address(USDC), address(orchestrator), 2_000 * 1e6);
+    vm.expectRevert("Deploy:not-allowed");
     orchestrator.recoverERC20(address(USDC), DEPLOYER, 1_000 * 1e6);
     
     vm.startPrank(DEPLOYER, DEPLOYER);
@@ -554,7 +554,14 @@ contract TestDeployment is Test, ParetoConstants, DeployScript {
     uint256 balPost = IERC20(USDC).balanceOf(DEPLOYER);
     vm.stopPrank();
 
+    vm.startPrank(TL_MULTISIG, TL_MULTISIG);
+    uint256 balPreMs = IERC20(USDC).balanceOf(TL_MULTISIG);
+    orchestrator.recoverERC20(address(USDC), TL_MULTISIG, 1_000 * 1e6);
+    uint256 balPostMs = IERC20(USDC).balanceOf(TL_MULTISIG);
+    vm.stopPrank();
+
     assertEq(balPost - balPre, 1_000 * 1e6, "orchestrator recoverERC20 failed");
+    assertEq(balPostMs - balPreMs, 1_000 * 1e6, "orchestrator recoverERC20 failed for Ms");
   }
 
   function testFork_EarlyUnlockMaxPenalty() external {
