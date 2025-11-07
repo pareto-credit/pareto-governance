@@ -1,7 +1,9 @@
 # Pareto Governance & ve8020 Integration
 
 ## High-Level Overview
-Pareto governance starts with the Pareto (PAR) token, an `ERC20Votes` asset whose entire 18.2M supply is minted during deployment and immediately allocated to the distribution contracts specified in the launch plan. Because PAR records voting power using timestamp-based snapshots, every holder’s influence at a given moment can be reproduced precisely across proposals and audits.
+Pareto governance starts with the Pareto (PAR) token, an `ERC20Votes` asset whose entire 18.2M supply is minted during deployment and immediately allocated to the distribution contracts specified in the deployment orchestrator smart contract.
+
+The orchestrator that mints PAR routes the full supply before the transaction completes: `INVESTOR_RESERVE` (10%) funds a three-year investor vesting schedule with a 12-month cliff, `BIG_IDLE_RESERVE` (~53%) flows into a four-month vest with a 10% initial unlock, `TOT_DISTRIBUTION` (3,244,604 PAR) powers the Merkle claim, `TOT_RESERVED_OPS` (10%) stays with the TL multisig for launch operations, `TEAM_RESERVE` (6%) seeds a team-managed `GovernableFund`, `PAR_SEED_AMOUNT` is held back for Balancer liquidity, and the remaining tokens settle inside the timelock-bound long-term fund.
 
 Voting strength in Pareto governance combines liquid PAR voting power and ve-derived voting power. A lightweight `VeVotesAdapter` reads historical ve balances from the Balancer voting escrow contract and exposes them through the standard `IERC5805` interface. The `VotesAggregator` then blends ve votes with liquid PAR votes using configurable basis-point weights, making it straightforward for the community to fine-tune how much influence each source should have without redeploying core contracts.
 
@@ -11,7 +13,15 @@ Proposals are executed through the `ParetoGovernorHybrid`, an OpenZeppelin-based
 
 ### PAR Token (`src/Pareto.sol`)
 - Extends `ERC20`, `ERC20Permit`, and `ERC20Votes`; snapshots rely on block timestamps (`clock()` / `CLOCK_MODE()` override) to align with Balancer’s ve8020 timestamp clock.
-- Entire supply is minted to the deployer (script orchestrator) and redistributed immediately to the Merkle airdrop and long-term fund during deployment.
+- Entire supply is minted to the orchestrator smart contract and redistributed immediately across the Merkle claim, vesting contracts, operational reserves, Balancer seed, team fund, and the timelock-controlled long-term fund.
+
+### Distribution, Vesting & Funds
+- `MerkleClaim` escrows the community distribution and exposes `enableClaims()` so the TL multisig decides when claims open. A 60-day grace period protects unclaimed balances before `sweep()` can recover leftovers.
+- Two `ParetoVesting` contracts receive JSON-provisioned allocations:
+  - **Investors** (`INVESTOR_RESERVE`): 12-month cliff, three-year linear vest, 0% initial unlock.
+  - **Big Idle** (`BIG_IDLE_RESERVE`): no cliff, four-month vest with a 10% initial unlock.
+  Both are owned by the TL multisig, track per-beneficiary state, support `claim`/`claimTo`/`claimFor`, and only allow owner recoveries that exceed the unvested reserve.
+- `GovernableFund` is deployed twice. `teamFund` (holding `TEAM_RESERVE`) stays under the TL multisig for discretionary coordination, whereas `longTermFund` receives the residual mint and is transferred to the timelock so governance proposals unlock treasury assets permissionlessly. The TL multisig wallet also keeps `TOT_RESERVED_OPS` for emissions and liquidity prior to decentralization.
 
 ### VeVotesAdapter (`src/governance/VeVotesAdapter.sol`)
 - Wraps the ve8020 `VotingEscrow` contract via the lightweight `IVeLocker` interface (`balanceOf(account, timestamp)` / `totalSupply(timestamp)`).
@@ -21,9 +31,13 @@ Proposals are executed through the `ParetoGovernorHybrid`, an OpenZeppelin-based
 ### VotesAggregator (`src/governance/VotesAggregator.sol`)
 - Ownable aggregator that accepts any two `IVotes`-compatible sources (PAR ERC20Votes and the ve adapter).
 - Each source is weighted using basis points (`parWeightBps`, `veWeightBps`); defaults is `10_000` for vePAR and `0` for PAR, so only ve holders can vote.
-- Uses `Math.mulDiv` for precise weighting and `try/catch` when querying snapshots so the aggregator tolerates sources that do not implement historical lookups for specific timestamps.
 - Ownership is transferred to the TL_MULTISIG during deployment, ensuring weight updates can be performed easily if needed so to have eg some votes for only ve holders while others for only liquid PAR holders (`updateWeights` guarded by `onlyOwner`).
 - Delegation surfaces remain disabled to prevent conflicting delegation logic across sources.
+
+### ParetoSmartWalletChecker (`src/staking/ParetoSmartWalletChecker.sol`)
+- Implements the VotingEscrow SmartWalletChecker interface so the voting escrow can restrict contract-based deposits.
+- Tracks explicit wallet approvals plus runtime code hashes; deployment preloads the TL multisig’s Gnosis Safe hash so the Safe can lock BPT immediately.
+- Ownership remains with the TL multisig, enabling future whitelist extensions or a switch to `allowAllSmartContracts` when desired.
 
 ### ParetoGovernorHybrid (`src/governance/ParetoGovernorHybrid.sol`)
 - Extends `GovernorCountingSimple` and `GovernorTimelockControl`; constructor wires the aggregated vote source and timelock.
@@ -51,6 +65,7 @@ Proposals are executed through the `ParetoGovernorHybrid`, an OpenZeppelin-based
   - `VotingEscrow` (ve8020 locker) – ownership handed to the TL multisig.
   - `RewardDistributor` – initialized with BAL token, PAR, and USDC as approved rewards and admin transferred to the TL multisig.
   - `RewardFaucet` – linked to the distributor.
+- `ParetoSmartWalletChecker` is deployed and installed on the voting escrow with the TL multisig Safe code hash pre-approved, ensuring only sanctioned contracts lock BPT.
 - `LensReward` is deployed to provide read-optimized views for frontends and analytics.
 - Locking 80/20 BPT in `VotingEscrow` yields vePAR balances, which the adapter exposes to governance. Rewards flow through the distributor → faucet to ve lockers on weekly cadences.
 
@@ -59,26 +74,27 @@ Proposals are executed through the `ParetoGovernorHybrid`, an OpenZeppelin-based
 ### ParetoDeployOrchestrator
 1. **Input Validation**: Requires non-zero aggregate weights, a non-empty `MERKLE_ROOT`, and that exactly `WETH_SEED_AMOUNT` wei is supplied for pool seeding (any other amount reverts).
 2. **Core Contracts**:
-   - Deploys PAR via `CREATE2` with a salt ensuring `address(PAR) > address(WETH)` (needed for Balancer ordering).
-   - Deploys `GovernableFund`, which is handed to the timelock once governance wiring completes (long-term reserve).
-   - Deploys `MerkleClaim` using `MERKLE_ROOT` and funds it with `TOT_DISTRIBUTION` PAR; remaining tokens go to the long-term fund.
+   - Deploys PAR via `CREATE2` with a salt ensuring `address(PAR) > address(WETH)` so Balancer token ordering is deterministic.
+   - Instantiates `teamFund`, `longTermFund`, the two `ParetoVesting` contracts (fed by JSON allocations), and `MerkleClaim`.
+   - Fans out the minted supply to each destination: `INVESTOR_RESERVE`, `BIG_IDLE_RESERVE`, `TOT_DISTRIBUTION`, `TOT_RESERVED_OPS`, `TEAM_RESERVE`, `PAR_SEED_AMOUNT`, with the remainder sitting in `longTermFund` before timelock transfer.
 3. **ve System Bootstrapping**:
    - Calls `_deploy8020Pool()` to create and seed the 80/20 pool via Balancer factory/router, returning BPT to the deployer.
-   - Invokes the ve8020 launchpad to deploy the voting escrow, reward distributor, and faucet; sets reward tokens (BAL, PAR, USDC) and transfers admin roles to the TL multisig.
+   - Invokes the ve8020 launchpad to deploy the voting escrow, reward distributor, and faucet; adds BAL/PAR/USDC to the reward allowlist, installs `ParetoSmartWalletChecker`, and transfers admin/ownership hooks to the TL multisig.
    - Deploys `LensReward` for data aggregation.
 4. **Governance Wiring**:
    - Deploys `VeVotesAdapter`, `VotesAggregator`, `TimelockController`, and `ParetoGovernorHybrid`.
    - Grants governor proposer/canceller roles on the timelock, transfers the long-term fund to the timelock, renounces deployer admin, and hands aggregator ownership to the TL multisig.
 
 ### DeployScript Wrapper
-- `run()` broadcasts the orchestrator deployment using Foundry cheatcodes.
-- `_fullDeploy()` instantiates the orchestrator with the required ETH, captures all emitted contract addresses, logs them via `console`, and returns the instances for tests.
-- `_postDeploy()` prints operational reminders:
-  - TL multisig must enable Merkle claims when ready (`merkle.enableClaims()`).
+- `run()` wraps `_fullDeploy()` inside a broadcast so the same script can be simulated or sent to mainnet with hardware wallets.
+- `_fullDeploy()` loads investor/big Idle allocation JSON files, instantiates the orchestrator with the exact ETH seed, logs deployed addresses via `console`, and returns references consumed by fork tests.
+- `_loadAllocations()` decodes the `.allocations` arrays from each JSON file and reverts if their sums deviate from `INVESTOR_RESERVE` or `BIG_IDLE_RESERVE`, ensuring on-chain vesting agreements always match the configured constants.
 
 ## Operational & Security Considerations
-- **Configurator (TL multisig)**: Retains ve system administration and direct control of `VotesAggregator` weights, while the long-term fund is governed by the timelock.
-- **Governance Upgrades**: Any change to timelock parameters, or governor upgrades should proceed via proposals to maintain auditability.
+- **Configurator (TL multisig)**: Owns the two vesting contracts, `teamFund`, the ops reserve, `VotesAggregator`, and `ParetoSmartWalletChecker`, while the timelock inherits `longTermFund` plus. Aggregator ownership can later be migrated to the timelock for full decentralization.
+- **Smart Wallet Access**: Only EOAs and explicitly approved smart contracts/code hashes can lock BPT. Keep `allowAllSmartContracts` disabled unless governance explicitly opens access.
+- **Vesting Administration**: The owner can batch payouts through `claimFor()` or reclaim excess tokens, but both contracts enforce per-beneficiary reserves so allocations remain solvent.
+- **Governance Upgrades**: Any change to timelock parameters or governor logic should be executed via proposals to preserve on-chain auditability.
 - **Delegation**: Disabled across adapter and aggregator to avoid inconsistencies with ve-held power; off-chain delegation tooling should target the PAR ERC20Votes token directly.
 - **Snapshot Clock**: All components use the timestamp clock (`mode=timestamp`); ensure validators and auditors account for potential miner-manipulated timestamps, especially near quorum calculations.
 - **Reward Tokens**: Distributor whitelist (BAL, PAR, USDC) is set at deployment; adding/removing tokens requires governance through the timelock.
