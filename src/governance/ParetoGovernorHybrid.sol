@@ -54,7 +54,7 @@ contract ParetoGovernorHybrid is GovernorCountingSimple, GovernorTimelockControl
   }
 
   /// @inheritdoc Governor
-  /// @notice 1% of total voting power at the previous block
+  /// @notice 1% of total voting power at the previous timestamp
   function proposalThreshold() public view override returns (uint256) {
     return Math.mulDiv(aggregator.getPastTotalSupply(clock() - 1), MIN_VOTES_BPS, BPS_DENOMINATOR);
   }
