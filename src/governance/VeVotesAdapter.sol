@@ -4,12 +4,7 @@ pragma solidity 0.8.28;
 import {Votes} from "@openzeppelin/contracts/governance/utils/Votes.sol";
 import {IERC5805} from "@openzeppelin/contracts/interfaces/IERC5805.sol";
 import {IERC6372} from "@openzeppelin/contracts/interfaces/IERC6372.sol";
-
-/// @notice Minimal interface for the ve8020 voting escrow locker
-interface IVeLocker {
-  function balanceOf(address account, uint256 timestamp) external view returns (uint256);
-  function totalSupply(uint256 timestamp) external view returns (uint256);
-}
+import {IVeLocker} from "./IVeLocker.sol";
 
 error VeVotesAdapterLockerZero();
 error VeVotesAdapterDelegationDisabled();
