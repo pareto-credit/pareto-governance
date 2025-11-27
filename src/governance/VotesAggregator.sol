@@ -111,32 +111,26 @@ contract VotesAggregator is IERC5805, Ownable {
   /// @notice Return current voting power for an account
   /// @param token The voting token to query
   /// @param account Address to query voting power for
-  /// @return value Current voting units
-  function _currentVotes(IVotes token, address account) internal view returns (uint256 value) {
-    try token.getVotes(account) returns (uint256 out) {
-      value = out;
-    } catch {}
+  /// @return Current voting units
+  function _currentVotes(IVotes token, address account) internal view returns (uint256) {
+    return token.getVotes(account);
   }
 
   /// @notice Return historical voting power for an account
   /// @param token The voting token to query
   /// @param account Address to query voting power for
   /// @param timepoint Timestamp to evaluate
-  /// @return value Historical voting units
-  function _pastVotes(IVotes token, address account, uint256 timepoint) internal view returns (uint256 value) {
-    try token.getPastVotes(account, timepoint) returns (uint256 out) {
-      value = out;
-    } catch {}
+  /// @return Historical voting units
+  function _pastVotes(IVotes token, address account, uint256 timepoint) internal view returns (uint256) {
+    return token.getPastVotes(account, timepoint);
   }
 
   /// @notice Return historical total voting supply
   /// @param token The voting token to query
   /// @param timepoint Timestamp to evaluate
-  /// @return value Historical total voting units
-  function _pastTotalSupply(IVotes token, uint256 timepoint) internal view returns (uint256 value) {
-    try token.getPastTotalSupply(timepoint) returns (uint256 out) {
-      value = out;
-    } catch {}
+  /// @return Historical total voting units
+  function _pastTotalSupply(IVotes token, uint256 timepoint) internal view returns (uint256) {
+    return token.getPastTotalSupply(timepoint);
   }
 
   /// @notice Update the weighting applied to PAR and ve votes.
