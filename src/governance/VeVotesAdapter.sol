@@ -11,6 +11,7 @@ error VeVotesAdapterDelegationDisabled();
 
 /// @title VeVotesAdapter
 /// @notice Wraps the ve8020 voting escrow to expose an {IVotes}-compatible API
+/// @notice Contract is not meant to be fully compliant wit h ERC5805 as nonces is not implemented and delegation disabled
 /// @dev The adapter projects voting power on timestamps (EIP-6372 timestamp clock)
 contract VeVotesAdapter is IERC5805 {
   IVeLocker public immutable veLocker;
