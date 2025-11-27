@@ -17,6 +17,7 @@ error VotesAggregatorDelegationDisabled();
 /// @notice Aggregates voting power from PAR (ERC20Votes) and ve8020 via the VeVotesAdapter
 ///         Implements the IERC5805 interface for compatibility with OpenZeppelin governors
 ///         Voting power from each source is weighted via basis points to allow tuning of influence
+///         Contract is not meant to be fully compliant wit h ERC5805 as nonces is not implemented and delegation disabled
 /// @dev Voting power is expressed in timestamps (EIP-6372 timestamp clock)
 contract VotesAggregator is IERC5805, Ownable {
   using Math for uint256;
