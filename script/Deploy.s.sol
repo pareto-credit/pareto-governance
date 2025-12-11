@@ -1,28 +1,43 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.28;
 
-import { Pareto } from "../src/Pareto.sol";
-import { ParetoGovernor } from "../src/ParetoGovernor.sol";
-import { ParetoTimelock } from "../src/ParetoTimelock.sol";
-import { MerkleClaim } from "../src/MerkleClaim.sol";
-import { GovernableFund } from "../src/GovernableFund.sol";
-import { Script } from "forge-std/src/Script.sol";
+import {Script} from "forge-std/src/Script.sol";
+import {console} from "forge-std/src/console.sol";
+import {console2} from "forge-std/src/console2.sol";
 
-import "forge-std/src/console.sol";
+import {Pareto} from "../src/Pareto.sol";
+import {MerkleClaim} from "../src/MerkleClaim.sol";
+import {GovernableFund} from "../src/GovernableFund.sol";
+import {ParetoConstants} from "../src/utils/ParetoConstants.sol";
+import {ParetoDeployOrchestrator} from "../src/deployment/ParetoDeployOrchestrator.sol";
+import {ParetoVesting} from "../src/vesting/ParetoVesting.sol";
 
-contract DeployScript is Script {
-  uint256 public TOT_SUPPLY = 18_200_000 * 1e18;
-  bytes32 public MERKLE_ROOT = 0x6edd0eecc77bf89794e0bb315c26a5ef4d308ea41ef05ae7fbe85d4fda84e83a;
-  uint256 public TOT_DISTRIBUTION = 9_385_579 * 1e18;
-  address public DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
+import {IBalancerVotingEscrow} from "../src/staking/interfaces/IBalancerVotingEscrow.sol";
+import {IRewardDistributorMinimal} from "../src/staking/interfaces/IRewardDistributorMinimal.sol";
+import {IRewardFaucetMinimal} from "../src/staking/interfaces/IRewardFaucetMinimal.sol";
+import {IBalancerWeightedPool} from "../src/staking/interfaces/IBalancerWeightedPool.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-  modifier broadcast() {
-    vm.startBroadcast();
-    _;
-    vm.stopBroadcast();
+import {VeVotesAdapter} from "../src/governance/VeVotesAdapter.sol";
+import {VotesAggregator} from "../src/governance/VotesAggregator.sol";
+import {ParetoGovernorHybrid} from "../src/governance/ParetoGovernorHybrid.sol";
+import {LensReward} from "ve8020-launchpad/contracts/LensReward.sol";
+import {ParetoSmartWalletChecker} from "../src/staking/ParetoSmartWalletChecker.sol";
+
+contract DeployScript is Script, ParetoConstants {
+  string internal constant INVESTOR_ALLOCATIONS_PATH = "distribution/investors.json";
+  string internal constant BIG_IDLE_ALLOCATIONS_PATH = "distribution/big_idle.json";
+
+  struct RawAllocations {
+    uint256 amount;
+    address beneficiary;
   }
 
-  function run() public broadcast {
+  error DeployScriptJsonMissingAllocations(string path);
+  error DeployScriptAllocationTotalMismatch(string path, uint256 expected, uint256 actual);
+
+  function run() public {
     // forge script ./script/Deploy.s.sol \
     // --fork-url $ETH_RPC_URL \
     // --ledger \
@@ -34,56 +49,102 @@ contract DeployScript is Script {
     // --sender "0xE5Dab8208c1F4cce15883348B72086dBace3e64B" \
     // --slow \
     // -vvv
-
-    _deploy();
+    vm.startBroadcast();
+    _fullDeploy();
+    vm.stopBroadcast();
   }
 
-  function _deploy() public returns (
+  function _fullDeploy() internal returns (
     Pareto par,
-    ParetoTimelock timelock,
-    ParetoGovernor governor,
     MerkleClaim merkle,
-    GovernableFund longTermFund
+    GovernableFund longTermFund,
+    GovernableFund teamFund,
+    IBalancerVotingEscrow votingEscrow,
+    IRewardDistributorMinimal rewardDistributor,
+    IRewardFaucetMinimal rewardFaucet,
+    ParetoVesting investorVesting,
+    ParetoVesting bigIdleVesting,
+    IBalancerWeightedPool bpt,
+    LensReward lens,
+    VeVotesAdapter veVotesAdapter,
+    VotesAggregator votesAggregator,
+    TimelockController timelock,
+    ParetoGovernorHybrid governor,
+    ParetoDeployOrchestrator orchestrator,
+    ParetoSmartWalletChecker smartWalletChecker
   ) {
-    // Deploy Pareto
-    par = new Pareto();
-    console.log('Pareto deployed at:', address(par));
+    require(PAR_WEIGHT_BPS + VE_WEIGHT_BPS > 0, "Deploy:invalid-weights");
+    require(MERKLE_ROOT != bytes32(0), "Deploy:merkle-root-zero");
 
-    // Deploy Timelock
-    // pre-compute governor address
-    address governorAddr = vm.computeCreateAddress(DEPLOYER, vm.getNonce(DEPLOYER) + 1);
-    uint256 minDelay = 2 days;
-    address[] memory proposers = new address[](1);
-    proposers[0] = governorAddr; // only governor can propose
-    address[] memory executors = new address[](1);
-    executors[0] = address(0); // anyone can execute
-    timelock = new ParetoTimelock(minDelay, proposers, executors);
-    console.log('ParetoTimelock deployed at:', address(timelock));
+    ParetoVesting.Allocation[] memory investorAllocations = _loadAllocations(
+      INVESTOR_ALLOCATIONS_PATH,
+      INVESTOR_RESERVE
+    );
+    ParetoVesting.Allocation[] memory bigIdleAllocations = _loadAllocations(
+      BIG_IDLE_ALLOCATIONS_PATH,
+      BIG_IDLE_RESERVE
+    );
 
-    // Deploy Governor
-    governor = new ParetoGovernor(par, timelock);
-    console.log('ParetoGovernor deployed at:', address(governor));
-    require(governorAddr == address(governor), 'Governor address mismatch');
+    orchestrator = new ParetoDeployOrchestrator{value: WETH_SEED_AMOUNT}(investorAllocations, bigIdleAllocations);
 
-    // Deploy GovernableFund
-    longTermFund = new GovernableFund(address(timelock));
-    console.log('GovernableFund deployed at:', address(longTermFund));
+    par = orchestrator.par();
+    merkle = orchestrator.merkle();
+    longTermFund = orchestrator.longTermFund();
+    teamFund = orchestrator.teamFund();
+    votingEscrow = orchestrator.votingEscrow();
+    rewardDistributor = orchestrator.rewardDistributor();
+    rewardFaucet = orchestrator.rewardFaucet();
+    investorVesting = orchestrator.investorVesting();
+    bigIdleVesting = orchestrator.bigIdleVesting();
+    bpt = orchestrator.bpt();
+    lens = orchestrator.lens();
+    veVotesAdapter = orchestrator.veVotesAdapter();
+    votesAggregator = orchestrator.votesAggregator();
+    timelock = orchestrator.timelock();
+    governor = orchestrator.governor();
+    smartWalletChecker = orchestrator.smartWalletChecker();
 
-    // Deploy MerkleClaim
-    require(MERKLE_ROOT != 0x0, 'Merkle root is not set');
-    merkle = new MerkleClaim(MERKLE_ROOT, address(par));
-    console.log('MerkleClaim deployed at:', address(merkle));
+    console.log("Pareto deployed at:", address(par));
+    console.log("GovernableFund deployed at:", address(longTermFund));
+    console.log("TeamFund deployed at:", address(teamFund));
+    console.log("MerkleClaim deployed at:", address(merkle));
+    console.log("InvestorVesting deployed at:", address(investorVesting));
+    console.log("BigIdleVesting deployed at:", address(bigIdleVesting));
+    console.log("8020 BPT deployed at:", address(bpt));
+    console.log("VotingEscrow deployed at:", address(votingEscrow));
+    console.log("RewardDistributor deployed at:", address(rewardDistributor));
+    console.log("RewardFaucet deployed at:", address(rewardFaucet));
+    console.log("LensReward deployed at:", address(lens));
+    console.log("VeVotesAdapter deployed at:", address(veVotesAdapter));
+    console.log("VotesAggregator deployed at:", address(votesAggregator));
+    console.log("TimelockController deployed at:", address(timelock));
+    console.log("ParetoGovernorHybrid deployed at:", address(governor));
+    console.log("SmartWalletChecker deployed at:", address(smartWalletChecker));
+    console2.log("Deployer BPT balance", IERC20(address(bpt)).balanceOf(DEPLOYER));
+  }
 
-    // transfer TOT_DISTRIBUTION to MerkleClaim
-    par.transfer(address(merkle), TOT_DISTRIBUTION);
-    console.log('Transfered', TOT_DISTRIBUTION, 'Pareto to MerkleClaim');
+  function _loadAllocations(string memory path, uint256 expectedTotal)
+    internal
+    view
+    returns (ParetoVesting.Allocation[] memory allocations)
+  {
+    string memory contents = vm.readFile(path);
+    bytes memory rawAllocationsData = vm.parseJson(contents, ".allocations");
+    RawAllocations[] memory decoded = abi.decode(rawAllocationsData, (RawAllocations[]));
+    uint256 length = decoded.length;
+    if (length == 0) revert DeployScriptJsonMissingAllocations(path);
 
-    // transfer the rest to GovernableFund
-    par.transfer(address(longTermFund), TOT_SUPPLY - TOT_DISTRIBUTION);
-    console.log('Transfered', TOT_SUPPLY - TOT_DISTRIBUTION, 'Pareto to GovernableFund');
-
-    // activate claims with TL_MULTISIG if needed
-    // merkle.enableClaims(); // activate claim
-    console.log('NOTE: activate claims with TL_MULTISIG if needed');
+    allocations = new ParetoVesting.Allocation[](length);
+    uint256 total;
+    for (uint256 i = 0; i < length; ++i) {
+      allocations[i] = ParetoVesting.Allocation({
+        beneficiary: decoded[i].beneficiary,
+        amount: decoded[i].amount
+      });
+      total += decoded[i].amount;
+    }
+    if (total != expectedTotal) {
+      revert DeployScriptAllocationTotalMismatch(path, expectedTotal, total);
+    }
   }
 }
