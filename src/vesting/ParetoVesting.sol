@@ -225,7 +225,7 @@ contract ParetoVesting is Ownable, ReentrancyGuard {
     uint256 currentTime = block.timestamp;
     uint256 initialUnlock = allocation * initialUnlockBps / BPS_DENOMINATOR;
 
-    if (currentTime <= startTimestamp || currentTime < cliffTimestamp) return initialUnlock;
+    if (currentTime < cliffTimestamp) return initialUnlock;
     if (currentTime >= endTimestamp) return allocation;
 
     uint256 linearPortion = allocation - initialUnlock;

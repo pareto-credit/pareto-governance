@@ -21,7 +21,11 @@ contract VotesAggregatorTest is Test {
   uint256 constant PAR_WEIGHT = 10_000; // 1x
   uint256 constant VE_WEIGHT = 5_000; // 0.5x
 
+  uint256 internal baseTimestamp;
+
   function setUp() public {
+    vm.warp(1);
+    baseTimestamp = block.timestamp;
     parVotes = new MockVotes();
     veVotes = new MockVotes();
     aggregator = new VotesAggregator(IVotes(parVotes), IVotes(veVotes), PAR_WEIGHT, VE_WEIGHT);
@@ -41,8 +45,6 @@ contract VotesAggregatorTest is Test {
   function test_Constructor() external view {
     assertEq(address(aggregator.parVotes()), address(parVotes), "par source mismatch");
     assertEq(address(aggregator.veVotes()), address(veVotes), "ve source mismatch");
-    assertEq(aggregator.parWeightBps(), PAR_WEIGHT, "par weight mismatch");
-    assertEq(aggregator.veWeightBps(), VE_WEIGHT, "ve weight mismatch");
     assertEq(aggregator.owner(), address(this), "owner mismatch");
   }
 
@@ -50,9 +52,47 @@ contract VotesAggregatorTest is Test {
     parVotes.setVotes(ALICE, 100);
     veVotes.setVotes(ALICE, 200);
 
-    vm.warp(1000);
+    vm.warp(baseTimestamp + 1_000);
     uint256 expected = 100 + (200 * VE_WEIGHT / 10_000);
     assertEq(aggregator.getPastVotes(ALICE, block.timestamp - 1), expected, "weighted votes mismatch");
+  }
+
+  function test_UpdateWeights_DoesNotAffectPastVotes() external {
+    parVotes.setVotes(ALICE, 100);
+    veVotes.setVotes(ALICE, 200);
+
+    vm.warp(baseTimestamp + 1_000);
+    assertEq(block.timestamp, baseTimestamp + 1_000, "warp mismatch: past snapshot");
+    uint256 pastTimepoint = block.timestamp - 1;
+    uint256 expectedOld = 100 + (200 * VE_WEIGHT / 10_000);
+    assertEq(aggregator.getPastVotes(ALICE, pastTimepoint), expectedOld, "initial weighted votes mismatch");
+
+    vm.warp(block.timestamp + 1_000);
+    assertEq(block.timestamp, baseTimestamp + 2_000, "warp mismatch: weight update block");
+    aggregator.updateWeights(5_000, 15_000);
+    uint256 updateTime = block.timestamp;
+
+    assertEq(_checkpointsLength(), 2, "checkpoint length");
+    (uint48 timepointOld, uint32 parWeightOld, uint32 veWeightOld) = _getCheckpoint(0);
+    assertEq(timepointOld, uint48(baseTimestamp), "initial checkpoint time mismatch");
+    assertEq(parWeightOld, PAR_WEIGHT, "initial checkpoint par weight mismatch");
+    assertEq(veWeightOld, VE_WEIGHT, "initial checkpoint ve weight mismatch");
+    (uint48 timepointNew, uint32 parWeightNew, uint32 veWeightNew) = _getCheckpoint(1);
+    assertEq(timepointNew, uint48(updateTime), "checkpoint time mismatch");
+    assertEq(parWeightNew, 5_000, "checkpoint par weight mismatch");
+    assertEq(veWeightNew, 15_000, "checkpoint ve weight mismatch");
+
+    assertEq(
+      aggregator.getPastVotes(ALICE, pastTimepoint), expectedOld, "past votes should not change after update"
+    );
+
+    uint256 queryTimepoint = updateTime + 1;
+    vm.warp(queryTimepoint + 1);
+    uint256 expectedNew = (100 * 5_000 / 10_000) + (200 * 15_000 / 10_000);
+    assertEq(aggregator.getVotes(ALICE), expectedNew, "current votes should reflect updated weights");
+    assertEq(
+      aggregator.getPastVotes(ALICE, queryTimepoint), expectedNew, "updated weights not applied to new snapshot"
+    );
   }
 
   function test_RevertWhen_TimepointNotFinal_GetPastVotes() external {
@@ -66,9 +106,52 @@ contract VotesAggregatorTest is Test {
     parVotes.setTotalSupply(600);
     veVotes.setTotalSupply(400);
 
-    vm.warp(2000);
+    vm.warp(baseTimestamp + 2_000);
     uint256 expected = 600 + (400 * VE_WEIGHT / 10_000);
     assertEq(aggregator.getPastTotalSupply(block.timestamp - 1), expected, "weighted total supply mismatch");
+  }
+
+  function test_UpdateWeights_DoesNotAffectPastTotalSupply() external {
+    parVotes.setTotalSupply(600);
+    veVotes.setTotalSupply(400);
+
+    vm.warp(baseTimestamp + 1_500);
+    assertEq(block.timestamp, baseTimestamp + 1_500, "warp mismatch: past total supply snapshot");
+    uint256 pastTimepoint = block.timestamp - 1;
+    uint256 expectedOld = 600 + (400 * VE_WEIGHT / 10_000);
+    assertEq(
+      aggregator.getPastTotalSupply(pastTimepoint), expectedOld, "initial weighted total supply mismatch"
+    );
+
+    vm.warp(block.timestamp + 1_000);
+    assertEq(block.timestamp, baseTimestamp + 2_500, "warp mismatch: weight update block (total supply)");
+    aggregator.updateWeights(15_000, 5_000);
+    uint256 updateTime = block.timestamp;
+
+    assertEq(_checkpointsLength(), 2, "checkpoint length");
+    (uint48 timepointOld, uint32 parWeightOld, uint32 veWeightOld) = _getCheckpoint(0);
+    assertEq(timepointOld, uint48(baseTimestamp), "initial checkpoint time mismatch");
+    assertEq(parWeightOld, PAR_WEIGHT, "initial checkpoint par weight mismatch");
+    assertEq(veWeightOld, VE_WEIGHT, "initial checkpoint ve weight mismatch");
+    (uint48 timepointNew, uint32 parWeightNew, uint32 veWeightNew) = _getCheckpoint(1);
+    assertEq(timepointNew, uint48(updateTime), "checkpoint time mismatch");
+    assertEq(parWeightNew, 15_000, "checkpoint par weight mismatch");
+    assertEq(veWeightNew, 5_000, "checkpoint ve weight mismatch");
+
+    assertEq(
+      aggregator.getPastTotalSupply(pastTimepoint),
+      expectedOld,
+      "past total supply should not change after weight update"
+    );
+
+    uint256 queryTimepoint = updateTime + 1;
+    vm.warp(queryTimepoint + 1);
+    uint256 expectedNew = (600 * 15_000 / 10_000) + (400 * 5_000 / 10_000);
+    assertEq(
+      aggregator.getPastTotalSupply(queryTimepoint),
+      expectedNew,
+      "updated weights not applied to new total supply snapshot"
+    );
   }
 
   function test_RevertWhen_TimepointNotFinal_GetPastTotalSupply() external {
@@ -102,8 +185,9 @@ contract VotesAggregatorTest is Test {
   }
 
   function test_ClockMode_Timestamp() external {
-    vm.warp(1234);
-    assertEq(aggregator.clock(), uint48(1234));
+    uint256 expectedTimestamp = baseTimestamp + 1_234;
+    vm.warp(expectedTimestamp);
+    assertEq(aggregator.clock(), uint48(expectedTimestamp));
     assertEq(keccak256(bytes(aggregator.CLOCK_MODE())), keccak256(bytes("mode=timestamp")), "clock mode mismatch");
   }
 
@@ -115,6 +199,24 @@ contract VotesAggregatorTest is Test {
     aggregator.delegateBySig(ALICE, 0, 0, 0, bytes32(0), bytes32(0));
 
     assertEq(aggregator.delegates(ALICE), address(0), "delegates mismatch");
+  }
+
+  function _checkpointsLength() internal view returns (uint256) {
+    // weightCheckpoints array length is stored in its slot (slot 1; slot 0 used by Ownable)
+    return uint256(vm.load(address(aggregator), bytes32(uint256(1))));
+  }
+
+  function _getCheckpoint(uint256 index)
+    internal
+    view
+    returns (uint48 timepoint, uint32 parBps, uint32 veBps)
+  {
+    bytes32 baseSlot = keccak256(abi.encode(uint256(1)));
+    bytes32 data = vm.load(address(aggregator), bytes32(uint256(baseSlot) + index));
+    uint256 word = uint256(data);
+    timepoint = uint48(word);
+    parBps = uint32(word >> 48);
+    veBps = uint32(word >> 80);
   }
 }
 

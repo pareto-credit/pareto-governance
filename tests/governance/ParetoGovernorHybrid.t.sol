@@ -8,6 +8,7 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 import {IERC5805} from "@openzeppelin/contracts/interfaces/IERC5805.sol";
 
 import {ParetoGovernorHybrid} from "../../src/governance/ParetoGovernorHybrid.sol";
+import {VotesAggregator} from "../../src/governance/VotesAggregator.sol";
 
 contract ParetoGovernorHybridTest is Test {
   bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
@@ -212,6 +213,66 @@ contract ParetoGovernorHybridTest is Test {
     assertEq(governor.proposalThreshold(), expectedThreshold, "threshold fuzz mismatch");
   }
 
+  function test_WeightsChange_DoesNotAffectRunningProposal() external {
+    MockVotesAggregator parVotes = new MockVotesAggregator();
+    MockVotesAggregator veVotes = new MockVotesAggregator();
+    VotesAggregator realAggregator = new VotesAggregator(parVotes, veVotes, 10_000, 0);
+
+    address[] memory proposers = new address[](1);
+    proposers[0] = address(this);
+    address[] memory executors = new address[](1);
+    executors[0] = address(0);
+
+    TimelockController localTimelock = new TimelockController(0, proposers, executors, address(this));
+    ParetoGovernorHybrid localGovernor = new ParetoGovernorHybrid(realAggregator, localTimelock);
+    localTimelock.grantRole(localTimelock.PROPOSER_ROLE(), address(localGovernor));
+    localTimelock.grantRole(localTimelock.EXECUTOR_ROLE(), address(0));
+
+    // Seed proposer eligibility at timepoint = now - 1 (used for proposal threshold)
+    uint256 proposalEligibilityTimepoint = block.timestamp - 1;
+    uint256 totalSupply = MOCK_SUPPLY;
+    parVotes.setPastTotalSupply(proposalEligibilityTimepoint, totalSupply);
+    parVotes.setPastVotes(PROPOSER, proposalEligibilityTimepoint, PROPOSER_VOTES);
+    parVotes.setCurrentVotes(PROPOSER, PROPOSER_VOTES);
+
+    address[] memory targets = new address[](1);
+    targets[0] = address(this);
+    uint256[] memory values = new uint256[](1);
+    values[0] = 0;
+    bytes[] memory calldatas = new bytes[](1);
+    calldatas[0] = abi.encodeWithSelector(this.doNothing.selector);
+    string memory description = "weights change during voting";
+
+    vm.prank(PROPOSER);
+    uint256 proposalId = localGovernor.propose(targets, values, calldatas, description);
+
+    uint256 snapshot = localGovernor.proposalSnapshot(proposalId);
+    // Ensure quorum/weights snapshot uses PAR-only weighting
+    parVotes.setPastTotalSupply(snapshot, totalSupply);
+    veVotes.setPastTotalSupply(snapshot, 0);
+    parVotes.setPastVotes(VOTER, snapshot, VOTER_VOTES);
+    veVotes.setPastVotes(VOTER, snapshot, 0);
+    parVotes.setCurrentVotes(VOTER, VOTER_VOTES);
+    veVotes.setCurrentVotes(VOTER, 0);
+
+    vm.warp(snapshot + 1);
+
+    // Flip weights after snapshot so ve weight dominates, but snapshot should still use old weights
+    realAggregator.updateWeights(0, 10_000);
+
+    vm.prank(VOTER);
+    localGovernor.castVote(proposalId, 1);
+
+    uint256 deadline = localGovernor.proposalDeadline(proposalId);
+    vm.warp(deadline + 1);
+
+    assertEq(
+      uint256(localGovernor.state(proposalId)),
+      uint256(IGovernor.ProposalState.Succeeded),
+      "proposal result should use snapshot weights"
+    );
+  }
+
   function _seedProposerEligibility(uint256 votes) internal {
     uint256 checkpoint = block.timestamp - 1;
     aggregator.setPastTotalSupply(checkpoint, MOCK_SUPPLY);
@@ -294,11 +355,13 @@ contract MockVotesAggregator is IERC5805 {
     revert MockVotesAggregatorDelegationUnsupported();
   }
 
-  function CLOCK_MODE() external pure override returns (string memory) {
+  function CLOCK_MODE() external pure returns (string memory) {
     return "mode=timestamp";
   }
 
-  function clock() external view override returns (uint48) {
+  function clock() external view returns (uint48) {
     return uint48(block.timestamp);
   }
 }
+
+// MockCheckpointVotes removed; MockVotesAggregator is reused for checkpointed IVotes behavior

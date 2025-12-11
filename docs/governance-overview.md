@@ -30,7 +30,7 @@ Proposals are executed through the `ParetoGovernorHybrid`, an OpenZeppelin-based
 
 ### VotesAggregator (`src/governance/VotesAggregator.sol`)
 - Ownable aggregator that accepts any two `IVotes`-compatible sources (PAR ERC20Votes and the ve adapter).
-- Each source is weighted using basis points (`parWeightBps`, `veWeightBps`); defaults is `10_000` for vePAR and `0` for PAR, so only ve holders can vote.
+- Each source is weighted using basis points, checkpointed over time; default is `10_000` for vePAR and `0` for PAR, so only ve holders can vote.
 - Ownership is transferred to the TL_MULTISIG during deployment, ensuring weight updates can be performed easily if needed so to have eg some votes for only ve holders while others for only liquid PAR holders (`updateWeights` guarded by `onlyOwner`).
 - Delegation surfaces remain disabled to prevent conflicting delegation logic across sources.
 

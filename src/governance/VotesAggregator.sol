@@ -17,17 +17,23 @@ error VotesAggregatorDelegationDisabled();
 /// @notice Aggregates voting power from PAR (ERC20Votes) and ve8020 via the VeVotesAdapter
 ///         Implements the IERC5805 interface for compatibility with OpenZeppelin governors
 ///         Voting power from each source is weighted via basis points to allow tuning of influence
+///         Contract is not meant to be fully compliant wit h ERC5805 as nonces is not implemented and delegation disabled
 /// @dev Voting power is expressed in timestamps (EIP-6372 timestamp clock)
 contract VotesAggregator is IERC5805, Ownable {
   using Math for uint256;
 
   uint256 internal constant BPS_DENOMINATOR = 10_000;
 
+  struct WeightsCheckpoint {
+    uint48 timepoint;
+    uint32 parWeightBps;
+    uint32 veWeightBps;
+  }
+
   IVotes public immutable parVotes;
   IVotes public immutable veVotes;
 
-  uint256 public parWeightBps;
-  uint256 public veWeightBps;
+  WeightsCheckpoint[] internal weightCheckpoints;
 
   event WeightsUpdated(uint256 parWeightBps, uint256 veWeightBps);
 
@@ -44,8 +50,13 @@ contract VotesAggregator is IERC5805, Ownable {
     if (_parWeightBps + _veWeightBps == 0) revert VotesAggregatorWeightsZero();
     parVotes = _parVotes;
     veVotes = _veVotes;
-    parWeightBps = _parWeightBps;
-    veWeightBps = _veWeightBps;
+    weightCheckpoints.push(
+      WeightsCheckpoint({
+        timepoint: uint48(block.timestamp),
+        parWeightBps: uint32(_parWeightBps),
+        veWeightBps: uint32(_veWeightBps)
+      })
+    );
   }
 
   /// @notice Return the timestamp used as the voting clock (EIP-6372)
@@ -63,7 +74,8 @@ contract VotesAggregator is IERC5805, Ownable {
   /// @param account Address to query voting power for
   /// @return votes Aggregated votes from PAR and ve sources
   function getVotes(address account) external view override returns (uint256) {
-    return _sum(_currentVotes(parVotes, account), _currentVotes(veVotes, account));
+    (uint256 parBps, uint256 veBps) = _latestWeights();
+    return _sum(_currentVotes(parVotes, account), _currentVotes(veVotes, account), parBps, veBps);
   }
 
   /// @notice Fetch historical aggregated voting power at a specific timestamp
@@ -72,7 +84,8 @@ contract VotesAggregator is IERC5805, Ownable {
   /// @return votes Aggregated votes from PAR and ve sources
   function getPastVotes(address account, uint256 timepoint) external view override returns (uint256) {
     _enforcePastTimepoint(timepoint);
-    return _sum(_pastVotes(parVotes, account, timepoint), _pastVotes(veVotes, account, timepoint));
+    (uint256 parBps, uint256 veBps) = _weightsAt(timepoint);
+    return _sum(_pastVotes(parVotes, account, timepoint), _pastVotes(veVotes, account, timepoint), parBps, veBps);
   }
 
   /// @notice Fetch historical total voting supply at a specific timestamp
@@ -80,7 +93,8 @@ contract VotesAggregator is IERC5805, Ownable {
   /// @return supply Aggregated vote supply from PAR and ve sources
   function getPastTotalSupply(uint256 timepoint) external view override returns (uint256) {
     _enforcePastTimepoint(timepoint);
-    return _sum(_pastTotalSupply(parVotes, timepoint), _pastTotalSupply(veVotes, timepoint));
+    (uint256 parBps, uint256 veBps) = _weightsAt(timepoint);
+    return _sum(_pastTotalSupply(parVotes, timepoint), _pastTotalSupply(veVotes, timepoint), parBps, veBps);
   }
 
   /// @notice Delegation is disabled; always returns the zero address
@@ -101,42 +115,42 @@ contract VotesAggregator is IERC5805, Ownable {
   /// @notice Sum weighted voting power from both sources
   /// @param parValue PAR voting units at the measured timepoint
   /// @param veValue ve voting units at the measured timepoint
+  /// @param parBps Basis points applied to PAR voting units
+  /// @param veBps Basis points applied to ve voting units
   /// @return weightedVotes Total weighted votes
-  function _sum(uint256 parValue, uint256 veValue) internal view returns (uint256 weightedVotes) {
-    uint256 weightedPar = Math.mulDiv(parValue, parWeightBps, BPS_DENOMINATOR);
-    uint256 weightedVe = Math.mulDiv(veValue, veWeightBps, BPS_DENOMINATOR);
+  function _sum(uint256 parValue, uint256 veValue, uint256 parBps, uint256 veBps)
+    internal
+    pure
+    returns (uint256 weightedVotes)
+  {
+    uint256 weightedPar = Math.mulDiv(parValue, parBps, BPS_DENOMINATOR);
+    uint256 weightedVe = Math.mulDiv(veValue, veBps, BPS_DENOMINATOR);
     weightedVotes = weightedPar + weightedVe;
   }
 
   /// @notice Return current voting power for an account
   /// @param token The voting token to query
   /// @param account Address to query voting power for
-  /// @return value Current voting units
-  function _currentVotes(IVotes token, address account) internal view returns (uint256 value) {
-    try token.getVotes(account) returns (uint256 out) {
-      value = out;
-    } catch {}
+  /// @return Current voting units
+  function _currentVotes(IVotes token, address account) internal view returns (uint256) {
+    return token.getVotes(account);
   }
 
   /// @notice Return historical voting power for an account
   /// @param token The voting token to query
   /// @param account Address to query voting power for
   /// @param timepoint Timestamp to evaluate
-  /// @return value Historical voting units
-  function _pastVotes(IVotes token, address account, uint256 timepoint) internal view returns (uint256 value) {
-    try token.getPastVotes(account, timepoint) returns (uint256 out) {
-      value = out;
-    } catch {}
+  /// @return Historical voting units
+  function _pastVotes(IVotes token, address account, uint256 timepoint) internal view returns (uint256) {
+    return token.getPastVotes(account, timepoint);
   }
 
   /// @notice Return historical total voting supply
   /// @param token The voting token to query
   /// @param timepoint Timestamp to evaluate
-  /// @return value Historical total voting units
-  function _pastTotalSupply(IVotes token, uint256 timepoint) internal view returns (uint256 value) {
-    try token.getPastTotalSupply(timepoint) returns (uint256 out) {
-      value = out;
-    } catch {}
+  /// @return Historical total voting units
+  function _pastTotalSupply(IVotes token, uint256 timepoint) internal view returns (uint256) {
+    return token.getPastTotalSupply(timepoint);
   }
 
   /// @notice Update the weighting applied to PAR and ve votes.
@@ -144,8 +158,13 @@ contract VotesAggregator is IERC5805, Ownable {
   /// @param newVeWeightBps The new weight applied to ve votes, expressed in basis points.
   function updateWeights(uint256 newParWeightBps, uint256 newVeWeightBps) external onlyOwner {
     if (newParWeightBps + newVeWeightBps == 0) revert VotesAggregatorWeightsZero();
-    parWeightBps = newParWeightBps;
-    veWeightBps = newVeWeightBps;
+    weightCheckpoints.push(
+      WeightsCheckpoint({
+        timepoint: uint48(block.timestamp),
+        parWeightBps: uint32(newParWeightBps),
+        veWeightBps: uint32(newVeWeightBps)
+      })
+    );
     emit WeightsUpdated(newParWeightBps, newVeWeightBps);
   }
 
@@ -156,5 +175,35 @@ contract VotesAggregator is IERC5805, Ownable {
     if (timepoint >= current) {
       revert Votes.ERC5805FutureLookup(timepoint, current);
     }
+  }
+
+  /// @dev Returns the latest stored weights
+  /// @return parBps Weight for PAR votes in basis points
+  /// @return veBps Weight for ve votes in basis points
+  function _latestWeights() internal view returns (uint256 parBps, uint256 veBps) {
+    WeightsCheckpoint memory w = weightCheckpoints[weightCheckpoints.length - 1];
+    parBps = w.parWeightBps;
+    veBps = w.veWeightBps;
+  }
+
+  /// @dev Returns the weights active at a given timepoint using binary search over checkpoints
+  /// @param timepoint Timestamp to query weights for
+  /// @return parBps Weight for PAR votes in basis points
+  /// @return veBps Weight for ve votes in basis points
+  function _weightsAt(uint256 timepoint) internal view returns (uint256 parBps, uint256 veBps) {
+    uint256 low;
+    uint256 high = weightCheckpoints.length;
+    while (low < high) {
+      uint256 mid = low + (high - low) / 2;
+      if (weightCheckpoints[mid].timepoint > timepoint) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+    uint256 index = low == 0 ? 0 : low - 1;
+    WeightsCheckpoint memory w = weightCheckpoints[index];
+    parBps = w.parWeightBps;
+    veBps = w.veWeightBps;
   }
 }
